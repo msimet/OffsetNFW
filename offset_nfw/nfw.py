@@ -33,6 +33,7 @@ class NFWModel(object):
         self.dir = dir
         self.cosmology = cosmology
         self.rho = rho
+        self.delta = delta
     
     def deltasigma_theory(self, r, M, c):
         """Return an NFW delta sigma from theory.
