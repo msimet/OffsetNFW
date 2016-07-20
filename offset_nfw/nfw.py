@@ -26,8 +26,35 @@ class NFWModel(object):
     Note that setting ``generate=True`` will only generate new internal interpolation tables `if
     those tables do not already exist`.  If you want to `re`generate a table, you should delete
     the table files. They all start `.saved_nfw*` and use the extension `.npy`.
+    
+    Parameters
+    ----------
+    cosmology : astropy.cosmology instance
+        A cosmology object that can return distances and densities for computing sigma crit and
+        rho_m or rho_c.  (Technically, this doesn't have to be an astropy.cosmology instance if it
+        has the methods ``angular_diameter_distance``, ``angular_diameter_distance_z1z2``, 
+        ``critical_density``, and ``Om``.)
+    dir : str
+        The directory where the saved tables should be stored (will be interpreted through
+        ``os.path``). [default: '.']
+    generate : boolean
+        if True, generate tables; if False, try to read them from disk. [default: False]
+    rho : str
+        Which type of overdensity to use for the halo, 'rho_m' or 'rho_c'. [default: 'rho_m']
+    delta : float
+        The overdensity at which the halo mass is defined [default: 200]
+    precision : float
+        The maximum allowable fractional error, defined for some mass range and concentration TBD
+    x_range : tuple
+        The min-max range of x (=r/r_s) for the interpolation table. Precision is not guaranteed for 
+        values other than the default.  [default: (0.0003, 300)]
+    miscentering_range : tuple
+        The min-max range of the rescaled miscentering radius (=r_mis/r_s) for the interpolation 
+        table. Precision is not guaranteed for values other than the default.
+        [default: (0.0003, 300)]
     """
-    def __init__(self, cosmology, dir='.', generate=False, rho='rho_m', delta=200):
+    def __init__(self, cosmology, dir='.', generate=False, rho='rho_m', delta=200,
+        precision=0.01, x_range=(0.0003, 300), miscentering_range=(0,4)):
         if generate:
             raise NotImplementedError("NFWModel currently can't do interpolation tables!")
         self.dir = dir
