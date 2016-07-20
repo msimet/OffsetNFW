@@ -35,6 +35,35 @@ class NFWModel(object):
         self.rho = rho
         self.delta = delta
     
+    def _form_iterables(self, r, *args):
+        """ Tile the given inputs for different NFW outputs such that we can make a single call to
+        the interpolation table."""
+        is_iterable = [hasattr(a, '__iter__') and len(a)>1 for a in args]
+        if sum(is_iterable)==0:
+            return r, *args
+        obj_shapes = []
+        for arg, iter in zip(args, is_iterable):
+            if iter:
+                obj_shapes.append(arg.shape)
+        elif len(set(obj_shapes))>1:
+            raise ValueError("All iterable non-r parameters must have same shape")
+        r = numpy.asarray(r)
+        args = [a if not hasattr(a, '__iter__') else (a if len(a)>1 else a[0]) for a in args]
+        iter_indx = numpy.where(is_iterable)[0]
+        arg = args[iter_indx]
+        temp_arg = numpy.tile(arg, r.shape)
+        new_r = numpy.tile(r, arg.shape).T
+        shape = temp_arg.shape
+        new_args = []
+        for arg, iter in zip(args, is_iterable):
+            if iter:
+                new_args.append(numpy.tile(arg, r.shape))
+            else:
+                new_args.append(numpy.tile(arg, shape))
+        return new_r, *new_args
+        
+        
+
     def deltasigma_theory(self, r, M, c):
         """Return an NFW delta sigma from theory.
         
