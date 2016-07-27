@@ -7,6 +7,8 @@ except ImportError:
     use_multiprocessing = False
 from functools import partial
 
+import astropy.units as u
+
 class NFWModel(object):
     """
     A class that generates offset NFW halo profiles.  The basic purpose of this class is to generate
@@ -61,6 +63,15 @@ class NFWModel(object):
         self.cosmology = cosmology
         self.rho = rho
         self.delta = delta
+        self.precision = precision
+        self.x_range = x_range
+        self.miscentering_range = miscentering_range
+        
+    def _filename(self):
+        return ''
+    
+    def sigma_to_deltasigma(r, ds):
+        pass
     
     def _form_iterables(self, r, *args):
         """ Tile the given inputs for different NFW outputs such that we can make a single call to
@@ -74,7 +85,7 @@ class NFWModel(object):
                 obj_shapes.append(arg.shape)
         elif len(set(obj_shapes))>1:
             raise ValueError("All iterable non-r parameters must have same shape")
-        r = numpy.asarray(r)
+        r = numpy.atleast_1d(r)
         args = [a if not hasattr(a, '__iter__') else (a if len(a)>1 else a[0]) for a in args]
         iter_indx = numpy.where(is_iterable)[0]
         arg = args[iter_indx]
@@ -88,9 +99,11 @@ class NFWModel(object):
             else:
                 new_args.append(numpy.tile(arg, shape))
         return new_r, *new_args
-        
-        
 
+    def scale_radius(self, M, c, z):
+        # Fix this for other rhos!!
+        return 0.10607844179/c*(m/(self.co.rhoc(z)*mod))**(1./3.)*u.Mpc
+        
     def deltasigma_theory(self, r, M, c):
         """Return an NFW delta sigma from theory.
         
