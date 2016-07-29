@@ -1,5 +1,6 @@
 import numpy
 import scipy.interpolate
+import os
 try:
     import multiprocessing
     use_multiprocessing = True
@@ -55,16 +56,60 @@ class NFWModel(object):
         table. Precision is not guaranteed for values other than the default.
         [default: (0.0003, 300)]
     """
-    def __init__(self, cosmology, dir='.', generate=False, rho='rho_m', delta=200,
-        precision=0.01, x_range=(0.0003, 300), miscentering_range=(0,4)):
+    def __init__(self, cosmology, dir='.', rho='rho_m', delta=200,
+        precision=0.01, x_range=(0.0003, 300), miscentering_range=(0,4), generate=False):
         if generate:
             raise NotImplementedError("NFWModel currently can't do interpolation tables!")
+            
+        if not os.path.exists(dir):
+            raise RuntimeError("Nonexistent save directory passed to NFWModel")
         self.dir = dir
+
+        if not (hasattr(cosmology, "angular_diameter_distance") and 
+                hasattr(cosmology, "angular_diameter_distance_z1z2") and
+                hasattr(cosmology, "Om")):
+            raise RuntimeError("Must pass working cosmology object to NFWModel")
         self.cosmology = cosmology
+
+        if not rho in ['rho_c', 'rho_m']:
+            raise RuntimeError("Only rho_c and rho_m currently implemented")
         self.rho = rho
+        
+        try:
+            float(delta)
+        except:
+            raise RuntimeError("Delta must be a real number")
+        if not delta>0:
+            raise RuntimeError("Delta<=0 is not physically sensible")
         self.delta = delta
+        
+        try:
+            float(precision)
+        except:
+            raise RuntimeError("Precision must be a real number")
+        if not precision>0:
+            raise RuntimeError("Precision must be greater than 0")
         self.precision = precision
+        
+        if not hasattr(x_range, '__iter__'):
+            raise RuntimeError("X range must be a length-2 tuple")
+        x_range = numpy.asarray(x_range)
+        if numpy.product(x_range.shape)!=2 or len(x_range)!=2:
+            raise RuntimeError("X range must be a length-2 tuple")
+        try:
+            numpy.array(x_range, dtype=float)
+        except:
+            raise RuntimeError("X range must be composed of real numbers")
         self.x_range = x_range
+        if not hasattr(miscentering_range, '__iter__'):
+            raise RuntimeError("miscentering range must be a length-2 tuple")
+        miscentering_range = numpy.asarray(miscentering_range)
+        if numpy.product(miscentering_range.shape)!=2 or len(miscentering_range)!=2:
+            raise RuntimeError("miscentering range must be a length-2 tuple")
+        try:
+            numpy.array(miscentering_range, dtype=float)
+        except:
+            raise RuntimeError("Miscentering range must be composed of real numbers")
         self.miscentering_range = miscentering_range
         
     def _filename(self):
@@ -78,12 +123,13 @@ class NFWModel(object):
         the interpolation table."""
         is_iterable = [hasattr(a, '__iter__') and len(a)>1 for a in args]
         if sum(is_iterable)==0:
-            return r, *args
+            new_tuple = (r,)+args
+            return new_tuple
         obj_shapes = []
         for arg, iter in zip(args, is_iterable):
             if iter:
                 obj_shapes.append(arg.shape)
-        elif len(set(obj_shapes))>1:
+        if len(set(obj_shapes))>1:
             raise ValueError("All iterable non-r parameters must have same shape")
         r = numpy.atleast_1d(r)
         args = [a if not hasattr(a, '__iter__') else (a if len(a)>1 else a[0]) for a in args]
@@ -92,13 +138,13 @@ class NFWModel(object):
         temp_arg = numpy.tile(arg, r.shape)
         new_r = numpy.tile(r, arg.shape).T
         shape = temp_arg.shape
-        new_args = []
+        new_args = [new_r]
         for arg, iter in zip(args, is_iterable):
             if iter:
                 new_args.append(numpy.tile(arg, r.shape))
             else:
                 new_args.append(numpy.tile(arg, shape))
-        return new_r, *new_args
+        return new_args
 
     def scale_radius(self, M, c, z):
         # Fix this for other rhos!!
