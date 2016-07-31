@@ -1,6 +1,7 @@
 import numpy
 import numpy.testing
 import astropy.cosmology
+import astropy.units as u
 try:
     import offset_nfw
 except ImportError:
@@ -68,7 +69,7 @@ def test_object_creation():
     numpy.testing.assert_equal(obj.comoving, False)
     
     # Should work
-    offset_nfw.NFWModel(astropy.cosmology.FlatLambdaCDM)
+    offset_nfw.NFWModel(astropy.cosmology.FlatLambdaCDM(H0=100, Om0=0.3))
 
 def test_form_iterables():
     """ Test the piece that makes iterables out of input parameters """
@@ -114,23 +115,23 @@ def test_scale_radii():
     """ Test scale radius measurement. """
     # Test against some precomputed values
     nfw_1 = offset_nfw.NFWModel(cosmo, delta=200, rho='rho_c')
-    numpy.testing.assert_equal(nfw_1.scale_radius(1E14, 4, 0.2), 0.250927041991)
-    numpy.testing.assert_equal(nfw_1.scale_radius(1E15, 3, 0.2), 0.720807898577)
-    numpy.testing.assert_equal(nfw_1.scale_radius(1E13, 5, 0.2), 0.0931760124926)
-    numpy.testing.assert_equal(nfw_1.scale_radius(1E14, 4, 0.1), 0.250927041991)
-    numpy.testing.assert_equal(nfw_1.scale_radius(1E14, 4.5, 0.3), 0.213527269104)
+    numpy.testing.assert_equal(nfw_1.scale_radius(1E14, 4, 0.2), 0.250927041991*u.Mpc)
+    numpy.testing.assert_equal(nfw_1.scale_radius(1E15, 3, 0.2), 0.720807898577*u.Mpc)
+    numpy.testing.assert_equal(nfw_1.scale_radius(1E13, 5, 0.2), 0.0931760124926*u.Mpc)
+    numpy.testing.assert_equal(nfw_1.scale_radius(1E14, 4, 0.1), 0.250927041991*u.Mpc)
+    numpy.testing.assert_equal(nfw_1.scale_radius(1E14, 4.5, 0.3), 0.213527269104*u.Mpc)
     nfw_2 = offset_nfw.NFWModel(cosmo, delta=150, rho='rho_c')
-    numpy.testing.assert_equal(nfw_2.scale_radius(1E14, 4, 0.2), 0.22798234765)
-    numpy.testing.assert_equal(nfw_2.scale_radius(1E15, 3, 0.2), 0.65489743799)
-    numpy.testing.assert_equal(nfw_2.scale_radius(1E13, 5, 0.2), 0.0846560255292)
-    numpy.testing.assert_equal(nfw_2.scale_radius(1E14, 4, 0.1), 0.22798234765)
-    numpy.testing.assert_equal(nfw_2.scale_radius(1E14, 4.5, 0.3), 0.19400239891)
+    numpy.testing.assert_equal(nfw_2.scale_radius(1E14, 4, 0.2), 0.22798234765*u.Mpc)
+    numpy.testing.assert_equal(nfw_2.scale_radius(1E15, 3, 0.2), 0.65489743799*u.Mpc)
+    numpy.testing.assert_equal(nfw_2.scale_radius(1E13, 5, 0.2), 0.0846560255292*u.Mpc)
+    numpy.testing.assert_equal(nfw_2.scale_radius(1E14, 4, 0.1), 0.22798234765*u.Mpc)
+    numpy.testing.assert_equal(nfw_2.scale_radius(1E14, 4.5, 0.3), 0.19400239891*u.Mpc)
     nfw_3 = offset_nfw.NFWModel(cosmo, delta=200, rho='rho_m')
-    numpy.testing.assert_equal(nfw_3.scale_radius(1E14, 4, 0.2), 0.281924022285)
-    numpy.testing.assert_equal(nfw_3.scale_radius(1E15, 3, 0.2), 0.809849191419)
-    numpy.testing.assert_equal(nfw_3.scale_radius(1E13, 5, 0.2), 0.104686031501)
-    numpy.testing.assert_equal(nfw_3.scale_radius(1E14, 4, 0.1), 0.281924022285)
-    numpy.testing.assert_equal(nfw_3.scale_radius(1E14, 4.5, 0.3), 0.25059913092)
+    numpy.testing.assert_equal(nfw_3.scale_radius(1E14, 4, 0.2), 0.281924022285*u.Mpc)
+    numpy.testing.assert_equal(nfw_3.scale_radius(1E15, 3, 0.2), 0.809849191419*u.Mpc)
+    numpy.testing.assert_equal(nfw_3.scale_radius(1E13, 5, 0.2), 0.104686031501*u.Mpc)
+    numpy.testing.assert_equal(nfw_3.scale_radius(1E14, 4, 0.1), 0.281924022285*u.Mpc)
+    numpy.testing.assert_equal(nfw_3.scale_radius(1E14, 4.5, 0.3), 0.25059913092*u.Mpc)
     nfw_4 = offset_nfw.NFWModel(cosmo, delta=200, rho='rho_m', comoving=False)
     numpy.testing.assert_equal(nfw_3.scale_radius(1E14, 4, 0.2), 
                                1.2*nfw_4.scale_radius(1E14, 4, 0.2))

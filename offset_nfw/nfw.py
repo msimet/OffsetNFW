@@ -161,18 +161,20 @@ class NFWModel(object):
 
     def scale_radius(self, M, c, z):
         """ Return the scale radius in comoving Mpc. """
+        if not isinstance(M, u.Quantity):
+            M = (M*u.Msun).to(u.g)
         if self.rho=='rho_c':
-            if comoving:
-                return self._rmod/c*(M*self.cosmology.Om(z)/self.cosmology.Om0)**0.33333333
+            if self.comoving:
+                rs = self._rmod/c*(M*self.cosmology.Om(z)/self.cosmology.Om0)**0.33333333
             else:
-                return self._rmod/c*(M/self.cosmology.efunc(z)**2)**0.33333333
+                rs = self._rmod/c*(M/self.cosmology.efunc(z)**2)**0.33333333
         else:
-            if comoving:
-                return self._rmod/c*(M/self.cosmology.Om0)**0.33333333
+            if self.comoving:
+                rs = self._rmod/c*(M/self.cosmology.Om0)**0.33333333
             else:
-                return self._rmod/c*(
+                rs = self._rmod/c*(
                     M/(self.cosmology.efunc(z)**2*self.cosmology.Om(z)))**0.33333333
-
+        return rs.to(u.Mpc**0.99999999).value*u.Mpc  # to deal with fractional powers
                 
     def deltasigma_theory(self, r, M, c):
         """Return an NFW delta sigma from theory.
