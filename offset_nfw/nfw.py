@@ -35,8 +35,8 @@ class NFWModel(object):
     cosmology : astropy.cosmology instance
         A cosmology object that can return distances and densities for computing sigma crit and
         rho_m or rho_c.  (Technically, this doesn't have to be an astropy.cosmology instance if it
-        has the methods ``angular_diameter_distance``, ``angular_diameter_distance_z1z2``, 
-        ``critical_density``, and ``Om``.)
+        has the methods ``angular_diameter_distance``, ``angular_diameter_distance_z1z2``, and 
+        ``efunc`` (=H(z)/H0)), plus the attributes ``critical_density0`` and ``Om0``,
     dir : str
         The directory where the saved tables should be stored (will be interpreted through
         ``os.path``). [default: '.']
@@ -44,6 +44,8 @@ class NFWModel(object):
         if True, generate tables; if False, try to read them from disk. [default: False]
     rho : str
         Which type of overdensity to use for the halo, 'rho_m' or 'rho_c'. [default: 'rho_m']
+    comoving: bool
+        Use comoving coordinates (True) or physical coordinates (False). [default: True]
     delta : float
         The overdensity at which the halo mass is defined [default: 200]
     precision : float
@@ -56,7 +58,7 @@ class NFWModel(object):
         table. Precision is not guaranteed for values other than the default.
         [default: (0.0003, 300)]
     """
-    def __init__(self, cosmology, dir='.', rho='rho_m', delta=200,
+    def __init__(self, cosmology, dir='.', rho='rho_m', comoving=True, delta=200,
         precision=0.01, x_range=(0.0003, 300), miscentering_range=(0,4), generate=False):
         if generate:
             raise NotImplementedError("NFWModel currently can't do interpolation tables!")
@@ -74,6 +76,13 @@ class NFWModel(object):
         if not rho in ['rho_c', 'rho_m']:
             raise RuntimeError("Only rho_c and rho_m currently implemented")
         self.rho = rho
+        
+        # Ordinarily I prefer Python duck-typing, but I want to avoid the case where somebody
+        # passes "comoving='physical'" and gets comoving coordinates instead because
+        # if 'physical' evaluates to True!
+        if not isinstance(comoving, bool):
+            raise RuntimeError("comoving must be True or False")
+        self.comoving = comoving
         
         try:
             float(delta)
@@ -112,6 +121,8 @@ class NFWModel(object):
             raise RuntimeError("Miscentering range must be composed of real numbers")
         self.miscentering_range = miscentering_range
         
+        self._rmod = (3./(4.*numpy.pi)/self.delta/self.cosmology.critical_density0)**0.33333333
+        
     def _filename(self):
         return ''
     
@@ -149,9 +160,20 @@ class NFWModel(object):
         return new_args
 
     def scale_radius(self, M, c, z):
-        # Fix this for other rhos!!
-        return 0.10607844179/c*(M/(self.co.rhoc(z)*mod))**(1./3.)*u.Mpc
-        
+        """ Return the scale radius in comoving Mpc. """
+        if self.rho=='rho_c':
+            if comoving:
+                return self._rmod/c*(M*self.cosmology.Om(z)/self.cosmology.Om0)**0.33333333
+            else:
+                return self._rmod/c*(M/self.cosmology.efunc(z)**2)**0.33333333
+        else:
+            if comoving:
+                return self._rmod/c*(M/self.cosmology.Om0)**0.33333333
+            else:
+                return self._rmod/c*(
+                    M/(self.cosmology.efunc(z)**2*self.cosmology.Om(z)))**0.33333333
+
+                
     def deltasigma_theory(self, r, M, c):
         """Return an NFW delta sigma from theory.
         
