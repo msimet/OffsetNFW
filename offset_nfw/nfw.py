@@ -128,27 +128,29 @@ class NFWModel(object):
         obj_shapes = []
         for arg, iter in zip(args, is_iterable):
             if iter:
-                obj_shapes.append(arg.shape)
+                obj_shapes.append(numpy.array(arg).shape)
         if len(set(obj_shapes))>1:
-            raise ValueError("All iterable non-r parameters must have same shape")
+            raise RuntimeError("All iterable non-r parameters must have same shape")
         r = numpy.atleast_1d(r)
         args = [a if not hasattr(a, '__iter__') else (a if len(a)>1 else a[0]) for a in args]
-        iter_indx = numpy.where(is_iterable)[0]
+        iter_indx = numpy.where(is_iterable)[0][0]
         arg = args[iter_indx]
-        temp_arg = numpy.tile(arg, r.shape)
+        shape = (-1,) + r.shape
+        temp_arg = numpy.tile(arg, r.shape).reshape(shape)
         new_r = numpy.tile(r, arg.shape).T
         shape = temp_arg.shape
         new_args = [new_r]
         for arg, iter in zip(args, is_iterable):
             if iter:
-                new_args.append(numpy.tile(arg, r.shape))
+                new_args.append(numpy.tile(arg, r.shape).reshape(shape[::-1]).T)
             else:
                 new_args.append(numpy.tile(arg, shape))
+        new_args = [n.reshape(shape) for n in new_args]
         return new_args
 
     def scale_radius(self, M, c, z):
         # Fix this for other rhos!!
-        return 0.10607844179/c*(m/(self.co.rhoc(z)*mod))**(1./3.)*u.Mpc
+        return 0.10607844179/c*(M/(self.co.rhoc(z)*mod))**(1./3.)*u.Mpc
         
     def deltasigma_theory(self, r, M, c):
         """Return an NFW delta sigma from theory.
