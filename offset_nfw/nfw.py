@@ -164,16 +164,15 @@ class NFWModel(object):
         if not isinstance(M, u.Quantity):
             M = (M*u.Msun).to(u.g)
         if self.rho=='rho_c':
+            # Easier to compute in physical
+            rs = self._rmod/c*(M/self.cosmology.critical_density(z)*self.cosmology.critical_density0)**0.33333333
             if self.comoving:
-                rs = self._rmod/c*(M*self.cosmology.Om(z)/self.cosmology.Om0)**0.33333333
-            else:
-                rs = self._rmod/c*(M/self.cosmology.efunc(z)**2)**0.33333333
+                rs *= 1.+z
         else:
-            if self.comoving:
-                rs = self._rmod/c*(M/self.cosmology.Om0)**0.33333333
-            else:
-                rs = self._rmod/c*(
-                    M/(self.cosmology.efunc(z)**2*self.cosmology.Om(z)))**0.33333333
+            # Easier to compute in comoving
+            rs = self._rmod/c*(M/self.cosmology.Om0)**0.33333333
+            if not self.comoving:
+                rs /= 1.+z
         return rs.to(u.Mpc**0.99999999).value*u.Mpc  # to deal with fractional powers
                 
     def deltasigma_theory(self, r, M, c):
