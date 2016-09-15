@@ -163,6 +163,46 @@ def test_scale_radii():
     except ImportError:
         pass
     
+def test_against_colossus():
+        try:
+            import colossus.Cosmology, colossus.HaloProfile
+            params = {'flat': True, 'H0': 100, 'Om0': 0.3}#, 'Ob0': 0.043, 'sigma8': 0.8, 'ns': 0.97}
+            colossus.Cosmology.setCosmology('myCosmo', params)
+            colossus_nfw_1 = colossus.HaloProfile.NFWProfile(M=1E14, c=4, z=0.2, mdef='200m')
+            nfw_1 = offset_nfw.NFWModel(cosmo, delta=200, rho='rho_m', comoving=False)
+            numpy.testing.assert_equal(
+                0.001*colossus_nfw_1.RDelta(z=0.2, mdef='200m')/4, nfw_1.scale_radius(1.E14, 4, 0.2))
+            colossus_nfw_1 = colossus.HaloProfile.NFWProfile(M=1E15, c=4, z=0.2, mdef='200m')
+            numpy.testing.assert_equal(
+                0.001*colossus_nfw_1.RDelta(z=0.2, mdef='200m')/4, nfw_1.scale_radius(1.E15, 4, 0.2))
+            colossus_nfw_1 = colossus.HaloProfile.NFWProfile(M=1E13, c=3.5, z=0.2, mdef='200m')
+            numpy.testing.assert_equal(
+                0.001*colossus_nfw_1.RDelta(z=0.2, mdef='200m')/3.5, nfw_1.scale_radius(1.E13, 3.5, 0.2))
+            colossus_nfw_1 = colossus.HaloProfile.NFWProfile(M=1E14, c=4, z=0.4, mdef='200m')
+            numpy.testing.assert_equal(
+                0.001*colossus_nfw_1.RDelta(z=0.4, mdef='200m')/4, nfw_1.scale_radius(1.E14, 4, 0.4))
+            colossus_nfw_1 = colossus.HaloProfile.NFWProfile(M=1E14, c=4, z=0.4, mdef='180m')
+            numpy.testing.assert_equal(
+                0.001*colossus_nfw_1.RDelta(z=0.4, mdef='180m')/4, nfw_1.scale_radius(1.E14, 4, 0.4))
+            
+            colossus_nfw_1 = colossus.HaloProfile.NFWProfile(M=1E14, c=4, z=0.2, mdef='200c')
+            nfw_1 = offset_nfw.NFWModel(cosmo, delta=200, rho='rho_c', comoving=False)
+            numpy.testing.assert_equal(
+                0.001*colossus_nfw_1.RDelta(z=0.2, mdef='200c')/4, nfw_1.scale_radius(1.E14, 4, 0.2))
+            colossus_nfw_1 = colossus.HaloProfile.NFWProfile(M=1E15, c=4, z=0.2, mdef='200c')
+            numpy.testing.assert_equal(
+                0.001*colossus_nfw_1.RDelta(z=0.2, mdef='200c')/4, nfw_1.scale_radius(1.E15, 4, 0.2))
+            colossus_nfw_1 = colossus.HaloProfile.NFWProfile(M=1E13, c=3.5, z=0.2, mdef='200c')
+            numpy.testing.assert_equal(
+                0.001*colossus_nfw_1.RDelta(z=0.2, mdef='200c')/3.5, nfw_1.scale_radius(1.E13, 3.5, 0.2))
+            colossus_nfw_1 = colossus.HaloProfile.NFWProfile(M=1E14, c=4, z=0.4, mdef='200c')
+            numpy.testing.assert_equal(
+                0.001*colossus_nfw_1.RDelta(z=0.4, mdef='200c')/4, nfw_1.scale_radius(1.E14, 4, 0.4))
+            colossus_nfw_1 = colossus.HaloProfile.NFWProfile(M=1E14, c=4, z=0.4, mdef='180c')
+            numpy.testing.assert_equal(
+                0.001*colossus_nfw_1.RDelta(z=0.4, mdef='180c')/4, nfw_1.scale_radius(1.E14, 4, 0.4))
+        except ImportError:
+            pass
     
 def test_against_galsim_theory():
     """ Test against the GalSim implementation of NFWs. """
@@ -247,6 +287,7 @@ if __name__=='__main__':
     test_form_iterables()
     test_scale_radii()
     test_z_ratios_theory()
+    test_against_colossus()
     test_against_galsim_theory()
     test_against_clusterlensing_theory()
     test_sigma_to_deltasigma_theory()
