@@ -115,92 +115,108 @@ def test_scale_radii():
     """ Test scale radius measurement. """
     # Test against some precomputed values
     nfw_1 = offset_nfw.NFWModel(cosmo, delta=200, rho='rho_c')
-    numpy.testing.assert_equal(nfw_1.scale_radius(1E14, 4, 0.2), 0.250927041991*u.Mpc)
-    numpy.testing.assert_equal(nfw_1.scale_radius(1E15, 3, 0.2), 0.720807898577*u.Mpc)
-    numpy.testing.assert_equal(nfw_1.scale_radius(1E13, 5, 0.2), 0.0931760124926*u.Mpc)
-    numpy.testing.assert_equal(nfw_1.scale_radius(1E14, 4, 0.1), 0.250927041991*u.Mpc)
-    numpy.testing.assert_equal(nfw_1.scale_radius(1E14, 4.5, 0.3), 0.213527269104*u.Mpc)
+    numpy.testing.assert_equal(nfw_1.scale_radius(1E14, 4, 0.2).to(u.Mpc).value, 0.2120377818122246)
+    numpy.testing.assert_equal(nfw_1.scale_radius(1E15, 3, 0.2).to(u.Mpc).value, 0.609095398969911)
+    numpy.testing.assert_equal(nfw_1.scale_radius(1E13, 5, 0.2).to(u.Mpc).value, 0.07873537663340793)
+    numpy.testing.assert_equal(nfw_1.scale_radius(1E14, 4, 0.1).to(u.Mpc).value, 0.20114937491773577)
+    numpy.testing.assert_equal(nfw_1.scale_radius(1E14, 4.5, 0.3).to(u.Mpc).value, 0.1968790019866928)
     nfw_2 = offset_nfw.NFWModel(cosmo, delta=150, rho='rho_c')
-    numpy.testing.assert_equal(nfw_2.scale_radius(1E14, 4, 0.2), 0.22798234765*u.Mpc)
-    numpy.testing.assert_equal(nfw_2.scale_radius(1E15, 3, 0.2), 0.65489743799*u.Mpc)
-    numpy.testing.assert_equal(nfw_2.scale_radius(1E13, 5, 0.2), 0.0846560255292*u.Mpc)
-    numpy.testing.assert_equal(nfw_2.scale_radius(1E14, 4, 0.1), 0.22798234765*u.Mpc)
-    numpy.testing.assert_equal(nfw_2.scale_radius(1E14, 4.5, 0.3), 0.19400239891*u.Mpc)
+    numpy.testing.assert_equal(nfw_2.scale_radius(1E14, 4, 0.2).to(u.Mpc).value, 0.23337777629652395)
+    numpy.testing.assert_equal(nfw_2.scale_radius(1E15, 3, 0.2).to(u.Mpc).value, 0.6703962310354946)
+    numpy.testing.assert_equal(nfw_2.scale_radius(1E13, 5, 0.2).to(u.Mpc).value, 0.08665949510284233)
+    numpy.testing.assert_equal(nfw_2.scale_radius(1E14, 4, 0.1).to(u.Mpc).value, 0.22139353383402788)
+    numpy.testing.assert_equal(nfw_2.scale_radius(1E14, 4.5, 0.3).to(u.Mpc).value, 0.21669338025721746)
     nfw_3 = offset_nfw.NFWModel(cosmo, delta=200, rho='rho_m')
-    numpy.testing.assert_equal(nfw_3.scale_radius(1E14, 4, 0.2), 0.281924022285*u.Mpc)
-    numpy.testing.assert_equal(nfw_3.scale_radius(1E15, 3, 0.2), 0.809849191419*u.Mpc)
-    numpy.testing.assert_equal(nfw_3.scale_radius(1E13, 5, 0.2), 0.104686031501*u.Mpc)
-    numpy.testing.assert_equal(nfw_3.scale_radius(1E14, 4, 0.1), 0.281924022285*u.Mpc)
-    numpy.testing.assert_equal(nfw_3.scale_radius(1E14, 4.5, 0.3), 0.25059913092*u.Mpc)
+    # These were computed using separate code, hence almost_equal instead of equal
+    numpy.testing.assert_almost_equal(nfw_3.scale_radius(1E14, 4, 0.2).to(u.Mpc).value, 0.281924022285, decimal=4)
+    numpy.testing.assert_almost_equal(nfw_3.scale_radius(1E15, 3, 0.2).to(u.Mpc).value, 0.809849191419, decimal=4)
+    numpy.testing.assert_almost_equal(nfw_3.scale_radius(1E13, 5, 0.2).to(u.Mpc).value, 0.104686031501, decimal=4)
+    numpy.testing.assert_almost_equal(nfw_3.scale_radius(1E14, 4, 0.1).to(u.Mpc).value, 0.281924022285, decimal=4)
+    numpy.testing.assert_almost_equal(nfw_3.scale_radius(1E14, 4.5, 0.3).to(u.Mpc).value, 0.25059913092, decimal=4)
     nfw_4 = offset_nfw.NFWModel(cosmo, delta=200, rho='rho_m', comoving=False)
-    numpy.testing.assert_equal(nfw_3.scale_radius(1E14, 4, 0.2), 
-                               1.2*nfw_4.scale_radius(1E14, 4, 0.2))
-    numpy.testing.assert_equal(nfw_3.scale_radius(1E15, 3, 0.2), 
-                               1.2*nfw_4.scale_radius(1E15, 3, 0.2))
-    numpy.testing.assert_equal(nfw_3.scale_radius(1E13, 5, 0.2), 
-                               1.2*nfw_4.scale_radius(1E13, 5, 0.2))
-    numpy.testing.assert_equal(nfw_3.scale_radius(1E14, 4, 0.1), 
-                               1.1*nfw_4.scale_radius(1E14, 4, 0.1))
-    numpy.testing.assert_equal(nfw_3.scale_radius(1E14, 4.5, 0.3), 
-                               1.3*nfw_4.scale_radius(1E14, 4.5, 0.3))
+    numpy.testing.assert_almost_equal(nfw_3.scale_radius(1E14, 4, 0.2).to(u.Mpc).value, 
+                               1.2*nfw_4.scale_radius(1E14, 4, 0.2).to(u.Mpc).value)
+    numpy.testing.assert_almost_equal(nfw_3.scale_radius(1E15, 3, 0.2).to(u.Mpc).value, 
+                               1.2*nfw_4.scale_radius(1E15, 3, 0.2).to(u.Mpc).value)
+    numpy.testing.assert_almost_equal(nfw_3.scale_radius(1E13, 5, 0.2).to(u.Mpc).value, 
+                               1.2*nfw_4.scale_radius(1E13, 5, 0.2).to(u.Mpc).value)
+    numpy.testing.assert_almost_equal(nfw_3.scale_radius(1E14, 4, 0.1).to(u.Mpc).value, 
+                               1.1*nfw_4.scale_radius(1E14, 4, 0.1).to(u.Mpc).value)
+    numpy.testing.assert_almost_equal(nfw_3.scale_radius(1E14, 4.5, 0.3).to(u.Mpc).value, 
+                               1.3*nfw_4.scale_radius(1E14, 4.5, 0.3).to(u.Mpc).value)
     nfw_5 = offset_nfw.NFWModel(cosmo, delta=150, rho='rho_c', comoving=False)
-    numpy.testing.assert_equal(nfw_2.scale_radius(1E14, 4, 0.2), 
-                               1.2*nfw_5.scale_radius(1E14, 4, 0.2))
-    numpy.testing.assert_equal(nfw_2.scale_radius(1E15, 3, 0.2), 
-                               1.2*nfw_5.scale_radius(1E15, 3, 0.2))
-    numpy.testing.assert_equal(nfw_2.scale_radius(1E13, 5, 0.2), 
-                               1.2*nfw_5.scale_radius(1E13, 5, 0.2))
-    numpy.testing.assert_equal(nfw_2.scale_radius(1E14, 4, 0.1), 
-                               1.1*nfw_5.scale_radius(1E14, 4, 0.1))
-    numpy.testing.assert_equal(nfw_2.scale_radius(1E14, 4.5, 0.3), 
-                               1.3*nfw_5.scale_radius(1E14, 4.5, 0.3))
+    numpy.testing.assert_almost_equal(nfw_2.scale_radius(1E14, 4, 0.2).to(u.Mpc).value, 
+                               1.2*nfw_5.scale_radius(1E14, 4, 0.2).to(u.Mpc).value)
+    numpy.testing.assert_almost_equal(nfw_2.scale_radius(1E15, 3, 0.2).to(u.Mpc).value, 
+                               1.2*nfw_5.scale_radius(1E15, 3, 0.2).to(u.Mpc).value)
+    numpy.testing.assert_almost_equal(nfw_2.scale_radius(1E13, 5, 0.2).to(u.Mpc).value, 
+                               1.2*nfw_5.scale_radius(1E13, 5, 0.2).to(u.Mpc).value)
+    numpy.testing.assert_almost_equal(nfw_2.scale_radius(1E14, 4, 0.1).to(u.Mpc).value, 
+                               1.1*nfw_5.scale_radius(1E14, 4, 0.1).to(u.Mpc).value)
+    numpy.testing.assert_almost_equal(nfw_2.scale_radius(1E14, 4.5, 0.3).to(u.Mpc).value, 
+                               1.3*nfw_5.scale_radius(1E14, 4.5, 0.3).to(u.Mpc).value)
+    nfw_6 = offset_nfw.NFWModel(cosmo, delta=200, rho='rho_c', comoving=False)
     
     try:
-        import galsim
+        import galsim.nfw_halo
+        # There is a hard-coded constant in galsim.nfw_halo that is 3 decimals, so we cannot go
+        # more precise than that
         for m, c, z in m_c_z_test_list:
-            nfw_comp = galsim.NFWModel(m, c, z, omega_m=cosmo.Om0)
-            numpy.testing.assert_equal(nfw_1.scale_radius(m, c, z), nfw_comp.rs)
+            nfw_comp = galsim.nfw_halo.NFWHalo(m, c, z, omega_m=cosmo.Om0)
+            numpy.testing.assert_almost_equal(nfw_6.scale_radius(m, c, z).to(u.Mpc).value, nfw_comp.rs, decimal=3)
     except ImportError:
         pass
     
 def test_against_colossus():
         try:
-            import colossus.Cosmology, colossus.HaloProfile
-            params = {'flat': True, 'H0': 100, 'Om0': 0.3}#, 'Ob0': 0.043, 'sigma8': 0.8, 'ns': 0.97}
+            import colossus.Cosmology, colossus.HaloDensityProfile
+            params = {'flat': True, 'H0': 100, 'Om0': 0.3, 'Ob0': 0.043, 'sigma8': 0.8, 'ns': 0.97}
             colossus.Cosmology.setCosmology('myCosmo', params)
-            colossus_nfw_1 = colossus.HaloProfile.NFWProfile(M=1E14, c=4, z=0.2, mdef='200m')
+            colossus_nfw_1 = colossus.HaloDensityProfile.NFWProfile(M=1E14, c=4, z=0.2, mdef='200m')
             nfw_1 = offset_nfw.NFWModel(cosmo, delta=200, rho='rho_m', comoving=False)
-            numpy.testing.assert_equal(
-                0.001*colossus_nfw_1.RDelta(z=0.2, mdef='200m')/4, nfw_1.scale_radius(1.E14, 4, 0.2))
-            colossus_nfw_1 = colossus.HaloProfile.NFWProfile(M=1E15, c=4, z=0.2, mdef='200m')
-            numpy.testing.assert_equal(
-                0.001*colossus_nfw_1.RDelta(z=0.2, mdef='200m')/4, nfw_1.scale_radius(1.E15, 4, 0.2))
-            colossus_nfw_1 = colossus.HaloProfile.NFWProfile(M=1E13, c=3.5, z=0.2, mdef='200m')
-            numpy.testing.assert_equal(
-                0.001*colossus_nfw_1.RDelta(z=0.2, mdef='200m')/3.5, nfw_1.scale_radius(1.E13, 3.5, 0.2))
-            colossus_nfw_1 = colossus.HaloProfile.NFWProfile(M=1E14, c=4, z=0.4, mdef='200m')
-            numpy.testing.assert_equal(
-                0.001*colossus_nfw_1.RDelta(z=0.4, mdef='200m')/4, nfw_1.scale_radius(1.E14, 4, 0.4))
-            colossus_nfw_1 = colossus.HaloProfile.NFWProfile(M=1E14, c=4, z=0.4, mdef='180m')
-            numpy.testing.assert_equal(
-                0.001*colossus_nfw_1.RDelta(z=0.4, mdef='180m')/4, nfw_1.scale_radius(1.E14, 4, 0.4))
+            numpy.testing.assert_almost_equal(
+                0.001*colossus_nfw_1.RDelta(z=0.2, mdef='200m')/4, 
+                nfw_1.scale_radius(1.E14, 4, 0.2).to(u.Mpc).value, decimal=4)
+            colossus_nfw_1 = colossus.HaloDensityProfile.NFWProfile(M=1E15, c=4, z=0.2, mdef='200m')
+            numpy.testing.assert_almost_equal(
+                0.001*colossus_nfw_1.RDelta(z=0.2, mdef='200m')/4, 
+                nfw_1.scale_radius(1.E15, 4, 0.2).to(u.Mpc).value, decimal=4)
+            colossus_nfw_1 = colossus.HaloDensityProfile.NFWProfile(M=1E13, c=3.5, z=0.2, mdef='200m')
+            numpy.testing.assert_almost_equal(
+                0.001*colossus_nfw_1.RDelta(z=0.2, mdef='200m')/3.5, 
+                nfw_1.scale_radius(1.E13, 3.5, 0.2).to(u.Mpc).value, decimal=4)
+            colossus_nfw_1 = colossus.HaloDensityProfile.NFWProfile(M=1E14, c=4, z=0.4, mdef='200m')
+            numpy.testing.assert_almost_equal(
+                0.001*colossus_nfw_1.RDelta(z=0.4, mdef='200m')/4, 
+                nfw_1.scale_radius(1.E14, 4, 0.4).to(u.Mpc).value, decimal=4)
+            colossus_nfw_1 = colossus.HaloDensityProfile.NFWProfile(M=1E14, c=4, z=0.4, mdef='180m')
+            nfw_2 = offset_nfw.NFWModel(cosmo, delta=180, rho='rho_m', comoving=False)
+            numpy.testing.assert_almost_equal(
+                0.001*colossus_nfw_1.RDelta(z=0.4, mdef='180m')/4, 
+                nfw_2.scale_radius(1.E14, 4, 0.4).to(u.Mpc).value, decimal=4)
             
-            colossus_nfw_1 = colossus.HaloProfile.NFWProfile(M=1E14, c=4, z=0.2, mdef='200c')
+            colossus_nfw_1 = colossus.HaloDensityProfile.NFWProfile(M=1E14, c=4, z=0.2, mdef='200c')
             nfw_1 = offset_nfw.NFWModel(cosmo, delta=200, rho='rho_c', comoving=False)
-            numpy.testing.assert_equal(
-                0.001*colossus_nfw_1.RDelta(z=0.2, mdef='200c')/4, nfw_1.scale_radius(1.E14, 4, 0.2))
-            colossus_nfw_1 = colossus.HaloProfile.NFWProfile(M=1E15, c=4, z=0.2, mdef='200c')
-            numpy.testing.assert_equal(
-                0.001*colossus_nfw_1.RDelta(z=0.2, mdef='200c')/4, nfw_1.scale_radius(1.E15, 4, 0.2))
-            colossus_nfw_1 = colossus.HaloProfile.NFWProfile(M=1E13, c=3.5, z=0.2, mdef='200c')
-            numpy.testing.assert_equal(
-                0.001*colossus_nfw_1.RDelta(z=0.2, mdef='200c')/3.5, nfw_1.scale_radius(1.E13, 3.5, 0.2))
-            colossus_nfw_1 = colossus.HaloProfile.NFWProfile(M=1E14, c=4, z=0.4, mdef='200c')
-            numpy.testing.assert_equal(
-                0.001*colossus_nfw_1.RDelta(z=0.4, mdef='200c')/4, nfw_1.scale_radius(1.E14, 4, 0.4))
-            colossus_nfw_1 = colossus.HaloProfile.NFWProfile(M=1E14, c=4, z=0.4, mdef='180c')
-            numpy.testing.assert_equal(
-                0.001*colossus_nfw_1.RDelta(z=0.4, mdef='180c')/4, nfw_1.scale_radius(1.E14, 4, 0.4))
+            numpy.testing.assert_almost_equal(
+                0.001*colossus_nfw_1.RDelta(z=0.2, mdef='200c')/4, 
+                nfw_1.scale_radius(1.E14, 4, 0.2).to(u.Mpc).value, decimal=4)
+            colossus_nfw_1 = colossus.HaloDensityProfile.NFWProfile(M=1E15, c=4, z=0.2, mdef='200c')
+            numpy.testing.assert_almost_equal(
+                0.001*colossus_nfw_1.RDelta(z=0.2, mdef='200c')/4, 
+                nfw_1.scale_radius(1.E15, 4, 0.2).to(u.Mpc).value, decimal=4)
+            colossus_nfw_1 = colossus.HaloDensityProfile.NFWProfile(M=1E13, c=3.5, z=0.2, mdef='200c')
+            numpy.testing.assert_almost_equal(
+                0.001*colossus_nfw_1.RDelta(z=0.2, mdef='200c')/3.5, 
+                nfw_1.scale_radius(1.E13, 3.5, 0.2).to(u.Mpc).value, decimal=4)
+            colossus_nfw_1 = colossus.HaloDensityProfile.NFWProfile(M=1E14, c=4, z=0.4, mdef='200c')
+            numpy.testing.assert_almost_equal(
+                0.001*colossus_nfw_1.RDelta(z=0.4, mdef='200c')/4, 
+                nfw_1.scale_radius(1.E14, 4, 0.4).to(u.Mpc).value, decimal=4)
+            colossus_nfw_1 = colossus.HaloDensityProfile.NFWProfile(M=1E14, c=4, z=0.4, mdef='180c')
+            nfw_2 = offset_nfw.NFWModel(cosmo, delta=180, rho='rho_c', comoving=False)
+            numpy.testing.assert_almost_equal(
+                0.001*colossus_nfw_1.RDelta(z=0.4, mdef='180c')/4, 
+                nfw_2.scale_radius(1.E14, 4, 0.4).to(u.Mpc).value, decimal=4)
         except ImportError:
             pass
     
@@ -286,8 +302,8 @@ if __name__=='__main__':
     test_object_creation()
     test_form_iterables()
     test_scale_radii()
-    test_z_ratios_theory()
     test_against_colossus()
+    test_z_ratios_theory()
     test_against_galsim_theory()
     test_against_clusterlensing_theory()
     test_sigma_to_deltasigma_theory()
