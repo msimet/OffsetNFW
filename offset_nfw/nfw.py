@@ -123,15 +123,69 @@ class NFWModel(object):
         
         self._rmod = (3./(4.*numpy.pi)/self.delta/self.cosmology.critical_density0)**0.33333333
         
+        if hasattr(self.cosmology, 'sigma_crit_inverse'):
+            self.sigma_crit_inverse = self.cosmology.sigma_crit_inverse
+        else:
+            from functools import partial
+            from .cosmology import sigma_crit_inverse
+            self.sigma_crit_inverse = partial(sigma_crit_inverse, self.cosmology)
+            
+    # Per Brainerd and Wright (arXiv:), these are the analytic descriptions of the 
+    # NFW lensing profiles.
+    def _deltasigmalt(self,x):
+        return (8.*numpy.arctanh(numpy.sqrt((1.-x)/(1.+x)))/(x*x*numpy.sqrt(1.-x*x))+
+            4./(x*x)*numpy.log(x/2.)-2./(x*x-1.)+
+            4.*numpy.arctanh(numpy.sqrt((1.-x)/(1.+x)))/((x*x-1.)*numpy.sqrt(1.-x*x)))
+    def _deltasigmaeq(self,x):
+        return 10./3.+4.*numpy.log(0.5)
+    def _deltasigmagt(self,x):
+        return (8.*numpy.arctan(numpy.sqrt((x-1.)/(1.+x)))/(x*x*numpy.sqrt(x*x-1.)) +
+            4./(x*x)*numpy.log(x/2.)-2./(x*x-1.)+
+            4.*numpy.arctan(numpy.sqrt((x-1.)/(1.+x)))/(pow((x*x-1.),1.5)))
+    def _sigmalt(self,x):
+        return 2./(x*x-1.)*(1.-2./numpy.sqrt(1.-x*x)*numpy.arctanh(numpy.sqrt((1.-x)/(1.+x))))
+    def _sigmaeq(self,x):
+        return 2./3.
+    def _sigmagt(self,x):
+        return 2./(x*x-1.)*(1.-2./numpy.sqrt(x*x-1.)*numpy.arctan(numpy.sqrt((x-1.)/(1.+x))))
+
     def _filename(self):
         return ''
     
     def sigma_to_deltasigma(r, ds):
         pass
     
+    def _get_shape(self, r, *args):
+        if hasattr(r, '__iter__'):
+            shape = list(r.shape)
+        else:
+            shape = []
+        args_1d = [numpy.atleast_1d(a) for a in args]
+        maxlen = max([a.shape for a in args_1d])
+        if numpy.product(maxlen)==1:
+            is_iterable = [hasattr(a, '__iter__') and len(a)>1 for a in args]
+            if numpy.any(is_iterable):
+                shape += list(maxlen)
+        else:
+            shape += list(maxlen)
+        return tuple(shape)
+        
+    def _reformat_shape(self, array, shape):
+        if not shape:
+            while hasattr(array, 'shape') and array.shape:
+                array = array[0]
+        else:
+            array = array.reshape(shape)
+        if isinstance(array, u.Quantity):
+            array = array.decompose()
+            if array.unit == u.dimensionless_unscaled:
+                return array.value
+        return array
+    
     def _form_iterables(self, r, *args):
         """ Tile the given inputs for different NFW outputs such that we can make a single call to
         the interpolation table."""
+        # TODO: check this works for multidimensional *args.
         is_iterable = [hasattr(a, '__iter__') and len(a)>1 for a in args]
         if sum(is_iterable)==0:
             new_tuple = (r,)+args
@@ -174,8 +228,17 @@ class NFWModel(object):
             if not self.comoving:
                 rs /= 1.+z
         return rs.to(u.Mpc**0.99999999).value*u.Mpc  # to deal with fractional powers
+
+    def nfw_norm(self, M, c, z):
+        """ Return the normalization for delta sigma and sigma. """
+        if not isinstance(M, u.Quantity):
+            M = (M*u.Msun).to(u.g)
+        deltac=self.delta/3.*c*c*c/(numpy.log(1.+c)-c/(1.+c))
+        rs = self.scale_radius(M, c, z)
+        return rs*deltac*self.reference_density(z)
+
                 
-    def deltasigma_theory(self, r, M, c):
+    def deltasigma_theory(self, r, M, c, z):
         """Return an NFW delta sigma from theory.
         
         Parameters
@@ -194,6 +257,9 @@ class NFWModel(object):
             The concentration of the halo at the overdensity definition given at class 
             initialization.  If this is an iterable, all other non-r parameters must be either
             iterables with the same length or floats.
+        z : float or iterable
+            The redshift of the halo.  If this is an iterable, all other non-r parameters must be
+            either iterables with the same length or floats.
         
         Returns
         -------
@@ -205,9 +271,26 @@ class NFWModel(object):
             (which of course may be only one item!), then this returns an array of shape
             ``(n1, n2, ..., nn, len(r))``.
         """
-        raise NotImplementedError("NFWModel currently can't do theoretical delta sigmas!")
+        shape = self._get_shape(r, M, c, z)
+        r, M, c, z = self._form_iterables(r, M, c, z)
+        rs = self.scale_radius(M, c, z)
+        if not isinstance(r, u.Quantity):
+            r *= u.Mpc
+        x = numpy.atleast_1d((r/rs).decompose().value)
+        
+        norm = self.nfw_norm(M, c, z)
+        return_vals = numpy.atleast_1d(numpy.zeros_like(x))
+        ltmask = x<1
+        return_vals[ltmask] = self._deltasigmalt(x[ltmask])
+        gtmask = x>1
+        return_vals[gtmask] = self._deltasigmagt(x[gtmask])
+        eqmask = x==1
+        return_vals[eqmask] = self._deltasigmaeq(x[eqmask])
+        return_vals = (norm*return_vals.T).T
+        return self._reformat_shape(return_vals, shape)
+        
     
-    def sigma_theory(self, r, M, c):
+    def sigma_theory(self, r, M, c, z):
         """Return an NFW sigma from theory.
         
         Parameters
@@ -237,8 +320,66 @@ class NFWModel(object):
             (which of course may be only one item!), then this returns an array of shape
             ``(n1, n2, ..., nn, len(r))``.
         """
-        raise NotImplementedError("NFWModel currently can't do theoretical sigmas!")
-    
+        shape = self._get_shape(r, M, c, z)
+        r, M, c, z = self._form_iterables(r, M, c, z)
+        rs = self.scale_radius(M, c, z)
+        if not isinstance(r, u.Quantity):
+            r *= u.Mpc
+        x = numpy.atleast_1d((r/rs).decompose().value)
+        norm = self.nfw_norm(M, c, z)
+        return_vals = numpy.atleast_1d(numpy.zeros_like(x))
+        ltmask = x<1
+        return_vals[ltmask] = self._sigmalt(x[ltmask])
+        gtmask = x>1
+        return_vals[gtmask] = self._sigmagt(x[gtmask])
+        eqmask = x==1
+        return_vals[eqmask] = self._sigmaeq(x[eqmask])
+        if norm.shape==return_vals.shape:
+            return_vals *= norm
+        else:
+            return_vals = norm.T*return_vals
+        return self._reformat_shape(return_vals, shape)
+
+    def rho_theory(self, r, M, c, z):
+        """Return an NFW rho from theory.
+        
+        Parameters
+        ----------
+        r : float or iterable
+            The radius or radii (in length, not angular, units) at which to evaluate the function.
+            Whatever definition (comoving/not, etc) you used for your cosmology object should be
+            replicated here.  This can be an object with astropy units of length; if not it is
+            assumed to be in Mpc/h.
+        M : float or iterable
+            The mass of the halo at the overdensity definition given at class initialization. If
+            this is an iterable, all other non-r parameters must be either iterables with the same
+            length or floats. This can be an object with astropy units of mass; if not it is assumed
+            to be in h Msun.
+        c : float or iterable
+            The concentration of the halo at the overdensity definition given at class 
+            initialization.  If this is an iterable, all other non-r parameters must be either
+            iterables with the same length or floats.
+        
+        Returns
+        -------
+        float or numpy.ndarray
+            Returns the value of sigma at the requested parameters. If every parameter was a
+            float, this is a float. If only r OR some of the non-r parameters were iterable, this is
+            a 1D array with the same length as the iterable parameters.  If both r and another
+            parameter were iterable, with the non-r parameter having shape ``(n1, n2, ..., nn)``
+            (which of course may be only one item!), then this returns an array of shape
+            ``(n1, n2, ..., nn, len(r))``.
+        """
+        shape = self._get_shape(r, M, c, z)
+        r, M, c, z = self._form_iterables(r, M, c, z)
+        rs = self.scale_radius(M, c, z)
+        if not isinstance(r, u.Quantity):
+            r *= u.Mpc
+        x = numpy.atleast_1d((r/rs).decompose().value)
+        norm = self.nfw_norm(M, c, z)/rs
+        return self._reformat_shape(norm/(x*(1.+x)**2), shape)
+
+        
     def Upsilon_theory(self, r, M, c, r0):
         """Return an NFW Upsilon statistic from theory.  
         
@@ -310,7 +451,11 @@ class NFWModel(object):
             (which of course may be only one item!), then this returns an array of shape
             ``(n1, n2, ..., nn, len(r))``.
         """
-        raise NotImplementedError("NFWModel currently can't do theoretical tangential shear!")
+        shape = self._get_shape(r, M, c, z_lens, z_source)
+        deltasigma = self.deltasigma_theory(r, M, c, z_lens)
+        r, M, c, z_lens, z_source = self._form_iterables(r, M, c, z_lens, z_source)
+        sci = self.sigma_crit_inverse(z_lens, z_source)
+        return self._reformat_shape(sci*deltasigma, shape)
 
     def kappa_theory(self, r, M, c, z_lens, z_source):
         """Return an NFW convergence from theory.
@@ -342,7 +487,11 @@ class NFWModel(object):
             (which of course may be only one item!), then this returns an array of shape
             ``(n1, n2, ..., nn, len(r))``.
         """
-        raise NotImplementedError("NFWModel currently can't do theoretical kappa!")
+        shape = self._get_shape(r, M, c, z_lens, z_source)
+        sigma = self.sigma_theory(r, M, c, z_lens)
+        r, M, c, z_lens, z_source = self._form_iterables(r, M, c, z_lens, z_source)
+        sci = self.sigma_crit_inverse(z_lens, z_source)
+        return self._reformat_shape(sci*sigma, shape)
 
     def g_theory(self, r, M, c, z_lens, z_source):
         """Return an NFW reduced shear from theory.
