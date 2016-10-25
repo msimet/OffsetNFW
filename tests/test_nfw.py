@@ -224,22 +224,24 @@ def test_against_galsim_theory():
     """ Test against the GalSim implementation of NFWs. """
     try:
         import galsim
-        nfw_1 = offset_nfw.NFWModel(cosmo, delta=200, rho='rho_c')
+        nfw_1 = offset_nfw.NFWModel(cosmo, delta=200, rho='rho_c', comoving=False)
         
         z_source = 4.95
         
-        radbins = numpy.exp(numpy.linspace(numpy.log(0.01), numpy.log(100), num=100))
+        radbins = numpy.exp(numpy.linspace(numpy.log(0.01), numpy.log(20), num=100))
         for m, c, z in [(1E14, 4, 0.2), (1E13, 4, 0.2), (1E15, 4, 0.2),
                         (1E14, 2, 0.2), (1E14, 6, 0.2), 
                         (1E14, 4, 0.05), (1E14, 4, 0.5), (1E14, 4, 4)]:
-            galsim_nfw = galsim.NFWModel(m, c, z, omega_m = cosmo.Om0)
+            galsim_nfw = galsim.NFWHalo(m, c, z, omega_m = cosmo.Om0)
             angular_pos_x = radbins/cosmo.angular_diameter_distance(z)*206265
             angular_pos_y = numpy.zeros_like(angular_pos_x)
-            numpy.testing.assert_equal(galsim_offset_nfw.getShear((angular_pos_x, angular_pos_y), z_source), 
-                                       nfw_1.gamma_theory(radbins, m, c, z, z_source))
-            numpy.testing.assert_equal(galsim_offset_nfw.getConvergence((angular_pos_x, angular_pos_y), z_source), 
-                                       nfw_1.kappa_theory(radbins, m, c, z, z_source))
-            numpy.testing.assert_equal(galsim_offset_nfw.getShear((angular_pos_x, angular_pos_y), z_source, reduced=True), 
+            # want tangential shear; galsim gives us 2-component, but all along x-axis, so just use
+            # first component with negative sign
+            numpy.testing.assert_almost_equal(-galsim_nfw.getShear((angular_pos_x, angular_pos_y), z_source, reduced=False)[0],
+                                       nfw_1.gamma_theory(radbins, m, c, z, z_source), decimal=3)
+            numpy.testing.assert_almost_equal(galsim_nfw.getConvergence((angular_pos_x, angular_pos_y), z_source), 
+                                       nfw_1.kappa_theory(radbins, m, c, z, z_source), decimal=3)
+            numpy.testing.assert_equal(-galsim_nfw.getShear((angular_pos_x, angular_pos_y), z_source, reduced=True)[0], 
                                        nfw_1.g_theory(radbins, m, c, z, z_source))
         
     except ImportError:
@@ -269,15 +271,15 @@ def test_z_ratios_theory():
     """ Test that the theoretical shear changes properly with redshift"""
     nfw_1 = offset_nfw.NFWModel(cosmo, delta=200, rho='rho_c')
     base = nfw_1.gamma_theory(1., 1.E14, 4, 0.1, 0.15)
-    new_z = numpy.linspace(0.15, 1.1, nsteps=20)
+    new_z = numpy.linspace(0.15, 1.1, num=20)
     new_gamma = nfw_1.gamma_theory(1, 1.E14, 4, 0.1, new_z)
     new_gamma /= base
-    numpy.testing.assert_equal(new_gamma, cosmo.angular_diameter_distance_z1z2(0.1, new_z)/cosmo.angular_diameter_distance_z1z2(0.1, 0.15))
+    numpy.testing.assert_almost_equal(new_gamma, cosmo.angular_diameter_distance_z1z2(0.1, new_z)/cosmo.angular_diameter_distance_z1z2(0.1, 0.15)*cosmo.angular_diameter_distance(0.15)/cosmo.angular_diameter_distance(new_z))
 
-    base = nfw_1.sigma_theory(1., 1.E14, 4, 0.1, 0.15)
-    new_sigma = nfw_1.sigma_theory(1, 1.E14, 4, 0.1, new_z)
+    base = nfw_1.kappa_theory(1., 1.E14, 4, 0.1, 0.15)
+    new_sigma = nfw_1.kappa_theory(1, 1.E14, 4, 0.1, new_z)
     new_sigma /= base
-    numpy.testing.assert_equal(new_sigma, cosmo.angular_diameter_distance_z1z2(0.1, new_z)/cosmo.angular_diameter_distance_z1z2(0.1, 0.15))
+    numpy.testing.assert_almost_equal(new_sigma, cosmo.angular_diameter_distance_z1z2(0.1, new_z)/cosmo.angular_diameter_distance_z1z2(0.1, 0.15)*cosmo.angular_diameter_distance(0.15)/cosmo.angular_diameter_distance(new_z))
     
     #TODO: do again, miscentered
     
