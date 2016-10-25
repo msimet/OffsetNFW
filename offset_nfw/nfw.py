@@ -121,7 +121,8 @@ class NFWModel(object):
             raise RuntimeError("Miscentering range must be composed of real numbers")
         self.miscentering_range = miscentering_range
         
-        self._rmod = (3./(4.*numpy.pi)/self.delta/self.cosmology.critical_density0)**0.33333333
+        # Useful quantity in scaling profiles
+        self._rmod = (3./(4.*numpy.pi)/self.delta)**0.33333333
         
         if hasattr(self.cosmology, 'sigma_crit_inverse'):
             self.sigma_crit_inverse = self.cosmology.sigma_crit_inverse
@@ -212,21 +213,28 @@ class NFWModel(object):
                 new_args.append(numpy.tile(arg, shape))
         new_args = [n.reshape(shape) for n in new_args]
         return new_args
+        
+    def reference_density(self, z):
+        """Return the reference density for this halo: that is, critical density for rho_c,
+           or matter density for rho_m, properly in comoving or physical."""
+        if self.rho=='rho_c':
+            dens = self.cosmology.critical_density(z)
+            if self.comoving:
+                return dens/(1.+z)**3
+            else:
+                return dens
+        else:
+            dens = self.cosmology.Om0*self.cosmology.critical_density0
+            if self.comoving:
+                return dens
+            else:
+                return dens*(1.+z)**3
 
     def scale_radius(self, M, c, z):
         """ Return the scale radius in comoving Mpc. """
         if not isinstance(M, u.Quantity):
             M = (M*u.Msun).to(u.g)
-        if self.rho=='rho_c':
-            # Easier to compute in physical
-            rs = self._rmod/c*(M/self.cosmology.critical_density(z)*self.cosmology.critical_density0)**0.33333333
-            if self.comoving:
-                rs *= 1.+z
-        else:
-            # Easier to compute in comoving
-            rs = self._rmod/c*(M/self.cosmology.Om0)**0.33333333
-            if not self.comoving:
-                rs /= 1.+z
+        rs = self._rmod/c*(M/self.reference_density(z))**0.33333333
         return rs.to(u.Mpc**0.99999999).value*u.Mpc  # to deal with fractional powers
 
     def nfw_norm(self, M, c, z):
