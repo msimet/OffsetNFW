@@ -11,4 +11,5 @@ def main():
     
     # Show individual radial slices for miscentering for each thing
     
+    # Show effect of precision
     
