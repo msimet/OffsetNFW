@@ -261,19 +261,23 @@ def test_against_clusterlensing_theory():
 
 def test_sigma_to_deltasigma_theory():
     """ Test that the numerical sigma -> deltasigma produces the theoretical DS. """
-    radbins = numpy.exp(numpy.linspace(numpy.log(0.01), numpy.log(100), num=100))
+    radbins = numpy.exp(numpy.linspace(numpy.log(0.001), numpy.log(100), num=500))
     nfw_1 = offset_nfw.NFWModel(cosmo, delta=200, rho='rho_c')
-    for m,c, z in m_c_z_test_list:
+    for m, c, z in m_c_z_test_list:
         ds = nfw_1.deltasigma_theory(radbins, m, c, z)
         sig = nfw_1.sigma_theory(radbins, m, c, z)
-        ds_from_sigma = nfw_1.sigma_to_deltasigma(radbins, sig, add_center = 'interp')
+        ds_from_sigma = nfw_1.sigma_to_deltasigma(radbins, sig)
+        ds_from_sigma2 = nfw_1.test_sigma_to_deltasigma(radbins, sig)
+        import matplotlib.pyplot as plt
+        n_to_keep=int(len(radbins)*0.6)
+        numpy.testing.assert_almost_equal(ds.value[-n_to_keep:], ds_from_sigma.value[-n_to_keep:], decimal=3)
+        numpy.testing.assert_equal(ds.unit, ds_from_sigma.unit)
         import matplotlib.pyplot as plt
         plt.plot(radbins, ds_from_sigma/ds, label="ds")
 #        plt.plot(radbins, ds_from_sigma, label="ds from sigma")
         plt.xscale('log')
+        plt.ylim((0., 2))
         plt.savefig('test.png')
-        numpy.testing.assert_almost_equal(ds.value, ds_from_sigma.value)
-        numpy.testing.assert_equal(ds.unit, ds_from_sigma.unit)
     #TODO: do again, miscentered
         
 def test_z_ratios_theory():
@@ -294,10 +298,13 @@ def test_z_ratios_theory():
     
 def test_g():
     """ Test that the theoretical returned g is the appropriate reduced shear """
+    radbins = numpy.exp(numpy.linspace(numpy.log(0.001), numpy.log(100), num=500))
     nfw_1 = offset_nfw.NFWModel(cosmo, delta=200, rho='rho_c')
     z_source = 4.95
     for m, c, z in m_c_z_test_list:
-        numpy.testing.assert_equal(nfw_1.g_theory(m, c, z, z_source), nfw_1.gamma_theory(m, c, z, z_source)/(1+nfw_1.kappa_theory(m, c, z, z_source)))
+        numpy.testing.assert_equal(nfw_1.g_theory(radbins, m, c, z, z_source), 
+                                   nfw_1.gamma_theory(radbins, m, c, z, z_source)
+                                  /(1-nfw_1.kappa_theory(radbins, m, c, z, z_source)))
     
 def test_Upsilon():
     """ Test that the theoretical Upsilon is the appropriate value. """
@@ -305,7 +312,6 @@ def test_Upsilon():
     
 def setup_table():
     """ Generate a small interpolation table so we can test its outputs. """
-    
     nfw_halo = offset_nfw.NFWModel(cosmo, generate=True, x_range=(0.1, 2), miscentering_range=(0, 0.2))
     
 if __name__=='__main__':
@@ -320,3 +326,4 @@ if __name__=='__main__':
     test_sigma_to_deltasigma_theory()
     test_g()
     test_Upsilon()
+

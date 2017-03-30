@@ -152,39 +152,8 @@ class NFWModel(object):
 
     def _filename(self):
         return ''
-    
-    def sigma_to_deltasigma(self, r, sigma, add_center=None):
-        """
-        add_center: if None, assume sigma(small)=0; if a value, assume sigma(small)=value;
-        if "interp", assume sigma(small) = sigma[0], where sigma(small) equals the approximate
-        average sigma within the circle enclosed by r[0].
-        """
-        if hasattr(r, 'unit'):
-            r_unit = r.unit
-            r = r.value
-        else:
-            r_unit = 1
-        if hasattr(sigma, 'unit'):
-            sigma_unit = sigma.unit
-            sigma = sigma.value
-        else:
-            sigma_unit = 1
-        halfr = numpy.zeros(len(r)+1)
-        halfr[1:-1] = numpy.sqrt(r[:-1]*r[1:])
-        halfr[0] = halfr[1]**2/halfr[2]
-        halfr[-1] = halfr[-1]**2/halfr[-2]
-        dr = r[1]/r[0]
-        area = numpy.pi*r**2*(dr-1./dr)
-        central_area = numpy.pi*r[0]**2/dr
-        central_value = 0
-#        sum_area = numpy.array([numpy.sum(area[:i])+central_area for i in range(len(area))])
-        sum_area = numpy.pi*r**2
-        halfmod = (1-1./dr)/(dr-1./dr)
-        sum_sigma = numpy.array([numpy.sum(area[:i]*sigma[:i])+sigma[i]*area[i]*halfmod+central_area*central_value for i in range(len(area))])
-        deltasigma = sum_sigma/sum_area - sigma
-        return deltasigma*sigma_unit#/dr
-    
-    def test_sigma_to_deltasigma(self, r, sigma, central_value=0):
+        
+    def sigma_to_deltasigma(self, r, sigma):
         """central_value is default 0; central_value = [something floating-point] will be used; 
         central_value = 'interp' will use the innermost value of sigma.  central_value must have same
         units as sigma, if given explicitly."""
@@ -198,19 +167,13 @@ class NFWModel(object):
             sigma = sigma.value
         else:
             sigma_unit = 1
-        bin_edges = numpy.zeros(len(r)+1)
-        bin_edges[1:-1] = numpy.sqrt(r[1:]*r[:-1])
-        bin_edges[0] = bin_edges[1]**2/bin_edges[2]
-        bin_edges[-1] = bin_edges[-2]**2/bin_edges[-3]
-        area = numpy.pi*(bin_edges[1:]**2-bin_edges[:-1]**2)
-        central_area = numpy.pi*bin_edges[0]**2
-        if central_value == 'interp':
-            central_value = sigma[0]
-        sum_area = numpy.array([numpy.sum(area[:i]) + central_area for i in range(len(area))])*r_unit**2
-        sum_sigma = numpy.array([numpy.sum(area[:i]*sigma[:i]) + central_area*central_value for i in range(len(area))])*sigma_unit*r_unit**2
+        sigma_r = 2*numpy.pi*r*sigma
+        sum_sigma = scipy.integrate.cumtrapz(sigma_r, r, initial=0)*sigma_unit*r_unit**2
+        sum_area = numpy.pi*(r**2-r[0]**2)*r_unit**2
+        
         deltasigma = sum_sigma/sum_area - sigma*sigma_unit
         return deltasigma
-    
+        
     def _get_shape(self, r, *args):
         if hasattr(r, '__iter__'):
             shape = list(r.shape)
@@ -338,7 +301,7 @@ class NFWModel(object):
         r, M, c, z = self._form_iterables(r, M, c, z)
         rs = self.scale_radius(M, c, z)
         if not isinstance(r, u.Quantity):
-            r *= u.Mpc
+            r = r*u.Mpc
         x = numpy.atleast_1d((r/rs).decompose().value)
         
         norm = self.nfw_norm(M, c, z)
@@ -387,7 +350,7 @@ class NFWModel(object):
         r, M, c, z = self._form_iterables(r, M, c, z)
         rs = self.scale_radius(M, c, z)
         if not isinstance(r, u.Quantity):
-            r *= u.Mpc
+            r = r*u.Mpc
         x = numpy.atleast_1d((r/rs).decompose().value)
         norm = self.nfw_norm(M, c, z)
         return_vals = numpy.atleast_1d(numpy.zeros_like(x))
