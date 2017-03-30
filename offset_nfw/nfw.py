@@ -406,7 +406,7 @@ class NFWModel(object):
         return self._reformat_shape(norm/(x*(1.+x)**2), shape)
 
         
-    def Upsilon_theory(self, r, M, c, r0):
+    def Upsilon_theory(self, r, M, c, z, r0):
         """Return an NFW Upsilon statistic from theory.  
         
         The Upsilon statistics were introduced in Baldauf et al 2010 and Mandelbaum et al 2010 and
@@ -430,6 +430,9 @@ class NFWModel(object):
             this is an iterable, all other non-r parameters must be either iterables with the same
             length or floats. This can be an object with astropy units of mass; if not it is assumed
             to be in h Msun.
+        z : float or iterable
+            The redshift of the lens.  If this is an iterable, all other non-r parameters must be
+            either iterables with the same length or floats.
         c : float or iterable
             The concentration of the halo at the overdensity definition given at class 
             initialization.  If this is an iterable, all other non-r parameters must be either
@@ -445,7 +448,10 @@ class NFWModel(object):
             (which of course may be only one item!), then this returns an array of shape
             ``(n1, n2, ..., nn, len(r))``.
         """
-        raise NotImplementedError("NFWModel currently can't do theoretical upsilon statistics!")
+        shape = self._get_shape(r, M, c, z, r0)
+        deltasigma = self.deltasigma_theory(r, M, c, z)
+        r, M, c, z, r0 = self._form_iterables(r, M, c, z, r0)
+        return self._reformat_shape(deltasigma-(r0/r)**2*self.deltasigma_theory(r0, M, c, z), shape)
 
     def gamma_theory(self, r, M, c, z_lens, z_source):
         """Return an NFW tangential shear from theory.

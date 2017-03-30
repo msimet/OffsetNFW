@@ -267,7 +267,6 @@ def test_sigma_to_deltasigma_theory():
         ds = nfw_1.deltasigma_theory(radbins, m, c, z)
         sig = nfw_1.sigma_theory(radbins, m, c, z)
         ds_from_sigma = nfw_1.sigma_to_deltasigma(radbins, sig)
-        ds_from_sigma2 = nfw_1.test_sigma_to_deltasigma(radbins, sig)
         import matplotlib.pyplot as plt
         n_to_keep=int(len(radbins)*0.6)
         numpy.testing.assert_almost_equal(ds.value[-n_to_keep:], ds_from_sigma.value[-n_to_keep:], decimal=3)
@@ -308,7 +307,23 @@ def test_g():
     
 def test_Upsilon():
     """ Test that the theoretical Upsilon is the appropriate value. """
-    pass
+    radbins = numpy.exp(numpy.linspace(numpy.log(0.001), numpy.log(100), num=500))
+    nfw_1 = offset_nfw.NFWModel(cosmo, delta=200, rho='rho_c')
+    for m, c, z in m_c_z_test_list:
+        for i in range(100, 200, 2):
+            r0 = radbins[0]
+            upsilon = nfw_1.Upsilon_theory(radbins, m, c, z, r0)
+            comp = (nfw_1.deltasigma_theory(radbins, m, c, z) 
+                                     - (r0/radbins)**2*nfw_1.deltasigma_theory(r0, m, c, z))
+            print upsilon[0:100]
+            print comp[0:100]
+            numpy.testing.assert_equal(upsilon, 
+                                       nfw_1.deltasigma_theory(radbins, m, c, z) 
+                                     - (r0/radbins)**2*nfw_1.deltasigma_theory(r0, m, c, z))
+            numpy.testing.assert_less_than(0, upsilon[:i])
+            numpy.testing.assert_equal(0, upsilon[i])
+            numpy.testing.assert_greater(0, upsilon[i+1:]) 
+    
     
 def setup_table():
     """ Generate a small interpolation table so we can test its outputs. """
