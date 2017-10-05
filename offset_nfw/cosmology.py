@@ -8,9 +8,9 @@ def sigma_crit_inverse(cosmo, z_lens, z_source):
     if z_lens.shape != z_source.shape:
         if numpy.product(z_lens.shape)==1:
             #TODO: multidimensional but 1-item cases
-            z_lens = numpy.full(z_lens[0], size=z_source.size)
+            z_lens = numpy.full(shape=z_source.size, fill_value=z_lens[0])
         elif numpy.product(z_source.shape)==1:
-            z_source = numpy.full(z_source[0], size=z_lens.size)
+            z_source = numpy.full(shape=z_lens.size, fill_value=z_source[0])
     if z_lens.shape != z_source.shape:
         raise RuntimeError("Can only compute sigma crit inverse for z_lens and z_source arrays of the same size")
     sci = numpy.zeros(z_lens.shape)*u.m*u.m/u.kg
