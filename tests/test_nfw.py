@@ -71,46 +71,6 @@ def test_object_creation():
     # Should work
     offset_nfw.NFWModel(astropy.cosmology.FlatLambdaCDM(H0=100, Om0=0.3))
 
-def test_form_iterables():
-    """ Test the piece that makes iterables out of input parameters """
-    nfw_obj = offset_nfw.NFWModel(fake_cosmo())
-    
-    len_rad = 10
-    len_many = 4
-    radial_bins = numpy.linspace(0.1, 1., num=len_rad)
-    single = 1.
-    many = numpy.linspace(0,3,num=len_many)
-
-    # Test some singles
-    res = nfw_obj._form_iterables(radial_bins, single)
-    numpy.testing.assert_equal(res, (radial_bins, single))
-    res = nfw_obj._form_iterables(radial_bins, single, single)
-    numpy.testing.assert_equal(res, (radial_bins, single, single))
-
-    # Test a single multi-point value
-    res = nfw_obj._form_iterables(radial_bins, many)
-    numpy.testing.assert_equal(res[0], numpy.array([radial_bins]*len_many))
-    numpy.testing.assert_equal(res[1], numpy.array([many]*len_rad).T)
-    
-    # Test a mix of multi-point and single-point objects
-    res = nfw_obj._form_iterables(radial_bins, many, single)
-    numpy.testing.assert_equal(res[0], numpy.array([radial_bins]*len_many))
-    numpy.testing.assert_equal(res[1], numpy.array([many]*len_rad).T)
-    numpy.testing.assert_equal(res[2], numpy.full((len(many), len(radial_bins)), single))
-    res = nfw_obj._form_iterables(radial_bins, many, single, single)
-    numpy.testing.assert_equal(res[0], numpy.array([radial_bins]*len_many))
-    numpy.testing.assert_equal(res[1], numpy.array([many]*len_rad).T)
-    numpy.testing.assert_equal(res[2], numpy.full((len(many), len(radial_bins)), single))
-    numpy.testing.assert_equal(res[3], numpy.full((len(many), len(radial_bins)), single))
-    res = nfw_obj._form_iterables(radial_bins, many, many, single)
-    numpy.testing.assert_equal(res[0], numpy.array([radial_bins]*len_many))
-    numpy.testing.assert_equal(res[1], numpy.array([many]*len_rad).T)
-    numpy.testing.assert_equal(res[2], numpy.array([many]*len_rad).T)
-    numpy.testing.assert_equal(res[3], numpy.full((len(many), len(radial_bins)), single))
-    
-    # Make sure things fail for multi-point objects of different lengths
-    numpy.testing.assert_raises(RuntimeError, nfw_obj._form_iterables, radial_bins, many, [1,2], 1)
-    
 def test_scale_radii():
     """ Test scale radius measurement. """
     # Test against some precomputed values
@@ -237,6 +197,7 @@ def test_against_galsim_theory():
             angular_pos_y = numpy.zeros_like(angular_pos_x)
             # want tangential shear; galsim gives us 2-component, but all along x-axis, so just use
             # first component with negative sign
+            nfw_1.gamma_theory(radbins, m, c, z, z_source)
             numpy.testing.assert_almost_equal(-galsim_nfw.getShear((angular_pos_x, angular_pos_y), z_source, reduced=False)[0],
                                        nfw_1.gamma_theory(radbins, m, c, z, z_source), decimal=3)
             numpy.testing.assert_almost_equal(galsim_nfw.getConvergence((angular_pos_x, angular_pos_y), z_source), 
@@ -267,7 +228,6 @@ def test_sigma_to_deltasigma_theory():
         ds = nfw_1.deltasigma_theory(radbins, m, c, z)
         sig = nfw_1.sigma_theory(radbins, m, c, z)
         ds_from_sigma = nfw_1.sigma_to_deltasigma(radbins, sig)
-        ds_from_sigma2 = nfw_1.test_sigma_to_deltasigma(radbins, sig)
         import matplotlib.pyplot as plt
         n_to_keep=int(len(radbins)*0.6)
         numpy.testing.assert_almost_equal(ds.value[-n_to_keep:], ds_from_sigma.value[-n_to_keep:], decimal=3)
@@ -317,7 +277,6 @@ def setup_table():
 if __name__=='__main__':
     #setup_table()
     test_object_creation()
-    test_form_iterables()
     test_scale_radii()
     test_against_colossus()
     test_z_ratios_theory()
