@@ -255,7 +255,7 @@ class NFWModel(object):
         return_vals[gtmask] = self._deltasigmagt(x[gtmask])
         eqmask = x==1
         return_vals[eqmask] = self._deltasigmaeq(x[eqmask])
-        return_vals = (norm*return_vals.T).T
+        return_vals = norm*return_vals
         return return_vals
         
     @reshape
@@ -301,10 +301,7 @@ class NFWModel(object):
         return_vals[gtmask] = self._sigmagt(x[gtmask])
         eqmask = x==1
         return_vals[eqmask] = self._sigmaeq(x[eqmask])
-        if norm.shape==return_vals.shape:
-            return_vals *= norm
-        else:
-            return_vals = norm.T*return_vals
+        return_vals = norm*return_vals #*= doesn't propagate units
         return return_vals
 
     @reshape
@@ -385,7 +382,8 @@ class NFWModel(object):
             (which of course may be only one item!), then this returns an array of shape
             ``(n1, n2, ..., nn, len(r))``.
         """
-        raise NotImplementedError("NFWModel currently can't do theoretical upsilon statistics!")
+        return (self.deltasigma_theory(r, M, c, z, skip_reformat=True) 
+                    - (r0/r)**2*self.deltasigma_theory(r0, M, c, z, skip_reformat=True))
 
     @reshape_multisource
     def gamma_theory(self, r, M, c, z_lens, z_source, z_source_pdf=None):
@@ -418,7 +416,7 @@ class NFWModel(object):
             (which of course may be only one item!), then this returns an array of shape
             ``(n1, n2, ..., nn, len(r))``.
         """
-        deltasigma = self.deltasigma_theory(r, M, c, z_lens)
+        deltasigma = self.deltasigma_theory(r, M, c, z_lens, skip_reformat=True)
         sci = self.sigma_crit_inverse(z_lens, z_source)
         return sci*deltasigma
 
@@ -453,7 +451,7 @@ class NFWModel(object):
             (which of course may be only one item!), then this returns an array of shape
             ``(n1, n2, ..., nn, len(r))``.
         """
-        sigma = self.sigma_theory(r, M, c, z_lens)
+        sigma = self.sigma_theory(r, M, c, z_lens, skip_reformat=True)
         sci = self.sigma_crit_inverse(z_lens, z_source)
         return sci*sigma
 
@@ -488,8 +486,8 @@ class NFWModel(object):
             (which of course may be only one item!), then this returns an array of shape
             ``(n1, n2, ..., nn, len(r))``.
         """
-        return (self.gamma_theory(r, M, c, z_lens, z_source)
-                 /(1.-self.kappa_theory(r, M, c, z_lens, z_source)))
+        return (self.gamma_theory(r, M, c, z_lens, z_source, skip_reformat=True)
+                 /(1.-self.kappa_theory(r, M, c, z_lens, z_source, skip_reformat=True)))
 
     @reshape
     def deltasigma(self, r, M, c, r_mis):
