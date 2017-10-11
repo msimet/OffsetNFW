@@ -26,6 +26,9 @@ class fake_cosmo(object):
 m_c_z_test_list = [(1E14, 4, 0.2), (1E13, 4, 0.2), (1E15, 4, 0.2),
                    (1E14, 2, 0.2), (1E14, 6, 0.2), 
                    (1E14, 4, 0.05), (1E14, 4, 0.5), (1E14, 4, 4)]
+m_c_z_multi_test_list = [([1E14, 1E15], 4, 0.2), 
+                         (1E14, [2,4,6], 0.2), 
+                         (1E14, 4, [0.2,0.5])]
 cosmo = astropy.cosmology.FlatLambdaCDM(H0=100, Om0=0.3)
         
 
@@ -71,61 +74,21 @@ def test_object_creation():
     # Should work
     offset_nfw.NFWModel(astropy.cosmology.FlatLambdaCDM(H0=100, Om0=0.3))
 
-def test_form_iterables():
-    """ Test the piece that makes iterables out of input parameters """
-    nfw_obj = offset_nfw.NFWModel(fake_cosmo())
-    
-    len_rad = 10
-    len_many = 4
-    radial_bins = numpy.linspace(0.1, 1., num=len_rad)
-    single = 1.
-    many = numpy.linspace(0,3,num=len_many)
-
-    # Test some singles
-    res = nfw_obj._form_iterables(radial_bins, single)
-    numpy.testing.assert_equal(res, (radial_bins, single))
-    res = nfw_obj._form_iterables(radial_bins, single, single)
-    numpy.testing.assert_equal(res, (radial_bins, single, single))
-
-    # Test a single multi-point value
-    res = nfw_obj._form_iterables(radial_bins, many)
-    numpy.testing.assert_equal(res[0], numpy.array([radial_bins]*len_many))
-    numpy.testing.assert_equal(res[1], numpy.array([many]*len_rad).T)
-    
-    # Test a mix of multi-point and single-point objects
-    res = nfw_obj._form_iterables(radial_bins, many, single)
-    numpy.testing.assert_equal(res[0], numpy.array([radial_bins]*len_many))
-    numpy.testing.assert_equal(res[1], numpy.array([many]*len_rad).T)
-    numpy.testing.assert_equal(res[2], numpy.full((len(many), len(radial_bins)), single))
-    res = nfw_obj._form_iterables(radial_bins, many, single, single)
-    numpy.testing.assert_equal(res[0], numpy.array([radial_bins]*len_many))
-    numpy.testing.assert_equal(res[1], numpy.array([many]*len_rad).T)
-    numpy.testing.assert_equal(res[2], numpy.full((len(many), len(radial_bins)), single))
-    numpy.testing.assert_equal(res[3], numpy.full((len(many), len(radial_bins)), single))
-    res = nfw_obj._form_iterables(radial_bins, many, many, single)
-    numpy.testing.assert_equal(res[0], numpy.array([radial_bins]*len_many))
-    numpy.testing.assert_equal(res[1], numpy.array([many]*len_rad).T)
-    numpy.testing.assert_equal(res[2], numpy.array([many]*len_rad).T)
-    numpy.testing.assert_equal(res[3], numpy.full((len(many), len(radial_bins)), single))
-    
-    # Make sure things fail for multi-point objects of different lengths
-    numpy.testing.assert_raises(RuntimeError, nfw_obj._form_iterables, radial_bins, many, [1,2], 1)
-    
 def test_scale_radii():
     """ Test scale radius measurement. """
     # Test against some precomputed values
     nfw_1 = offset_nfw.NFWModel(cosmo, delta=200, rho='rho_c')
-    numpy.testing.assert_almost_equal(nfw_1.scale_radius(1E14, 4, 0.2).to(u.Mpc).value, 0.2120377818122246)
-    numpy.testing.assert_almost_equal(nfw_1.scale_radius(1E15, 3, 0.2).to(u.Mpc).value, 0.609095398969911)
-    numpy.testing.assert_almost_equal(nfw_1.scale_radius(1E13, 5, 0.2).to(u.Mpc).value, 0.07873537663340793)
-    numpy.testing.assert_almost_equal(nfw_1.scale_radius(1E14, 4, 0.1).to(u.Mpc).value, 0.20114937491773577)
-    numpy.testing.assert_almost_equal(nfw_1.scale_radius(1E14, 4.5, 0.3).to(u.Mpc).value, 0.1968790019866928)
+    numpy.testing.assert_allclose(nfw_1.scale_radius(1E14, 4, 0.2).to(u.Mpc).value, 0.2120377818122246)
+    numpy.testing.assert_allclose(nfw_1.scale_radius(1E15, 3, 0.2).to(u.Mpc).value, 0.609095398969911)
+    numpy.testing.assert_allclose(nfw_1.scale_radius(1E13, 5, 0.2).to(u.Mpc).value, 0.07873537663340793)
+    numpy.testing.assert_allclose(nfw_1.scale_radius(1E14, 4, 0.1).to(u.Mpc).value, 0.20114937491773577)
+    numpy.testing.assert_allclose(nfw_1.scale_radius(1E14, 4.5, 0.3).to(u.Mpc).value, 0.1968790019866928)
     nfw_2 = offset_nfw.NFWModel(cosmo, delta=150, rho='rho_c')
-    numpy.testing.assert_almost_equal(nfw_2.scale_radius(1E14, 4, 0.2).to(u.Mpc).value, 0.23337777629652395)
-    numpy.testing.assert_almost_equal(nfw_2.scale_radius(1E15, 3, 0.2).to(u.Mpc).value, 0.6703962310354946)
-    numpy.testing.assert_almost_equal(nfw_2.scale_radius(1E13, 5, 0.2).to(u.Mpc).value, 0.08665949510284233)
-    numpy.testing.assert_almost_equal(nfw_2.scale_radius(1E14, 4, 0.1).to(u.Mpc).value, 0.22139353383402788)
-    numpy.testing.assert_almost_equal(nfw_2.scale_radius(1E14, 4.5, 0.3).to(u.Mpc).value, 0.21669338025721746)
+    numpy.testing.assert_allclose(nfw_2.scale_radius(1E14, 4, 0.2).to(u.Mpc).value, 0.23337777629652395)
+    numpy.testing.assert_allclose(nfw_2.scale_radius(1E15, 3, 0.2).to(u.Mpc).value, 0.6703962310354946)
+    numpy.testing.assert_allclose(nfw_2.scale_radius(1E13, 5, 0.2).to(u.Mpc).value, 0.08665949510284233)
+    numpy.testing.assert_allclose(nfw_2.scale_radius(1E14, 4, 0.1).to(u.Mpc).value, 0.22139353383402788)
+    numpy.testing.assert_allclose(nfw_2.scale_radius(1E14, 4.5, 0.3).to(u.Mpc).value, 0.21669338025721746)
     nfw_3 = offset_nfw.NFWModel(cosmo, delta=200, rho='rho_m')
     # These were computed using separate code, hence almost_equal instead of equal
     numpy.testing.assert_almost_equal(nfw_3.scale_radius(1E14, 4, 0.2).to(u.Mpc).value, 0.281924022285, decimal=4)
@@ -134,26 +97,26 @@ def test_scale_radii():
     numpy.testing.assert_almost_equal(nfw_3.scale_radius(1E14, 4, 0.1).to(u.Mpc).value, 0.281924022285, decimal=4)
     numpy.testing.assert_almost_equal(nfw_3.scale_radius(1E14, 4.5, 0.3).to(u.Mpc).value, 0.25059913092, decimal=4)
     nfw_4 = offset_nfw.NFWModel(cosmo, delta=200, rho='rho_m', comoving=False)
-    numpy.testing.assert_almost_equal(nfw_3.scale_radius(1E14, 4, 0.2).to(u.Mpc).value, 
+    numpy.testing.assert_allclose(nfw_3.scale_radius(1E14, 4, 0.2).to(u.Mpc).value, 
                                1.2*nfw_4.scale_radius(1E14, 4, 0.2).to(u.Mpc).value)
-    numpy.testing.assert_almost_equal(nfw_3.scale_radius(1E15, 3, 0.2).to(u.Mpc).value, 
+    numpy.testing.assert_allclose(nfw_3.scale_radius(1E15, 3, 0.2).to(u.Mpc).value, 
                                1.2*nfw_4.scale_radius(1E15, 3, 0.2).to(u.Mpc).value)
-    numpy.testing.assert_almost_equal(nfw_3.scale_radius(1E13, 5, 0.2).to(u.Mpc).value, 
+    numpy.testing.assert_allclose(nfw_3.scale_radius(1E13, 5, 0.2).to(u.Mpc).value, 
                                1.2*nfw_4.scale_radius(1E13, 5, 0.2).to(u.Mpc).value)
-    numpy.testing.assert_almost_equal(nfw_3.scale_radius(1E14, 4, 0.1).to(u.Mpc).value, 
+    numpy.testing.assert_allclose(nfw_3.scale_radius(1E14, 4, 0.1).to(u.Mpc).value, 
                                1.1*nfw_4.scale_radius(1E14, 4, 0.1).to(u.Mpc).value)
-    numpy.testing.assert_almost_equal(nfw_3.scale_radius(1E14, 4.5, 0.3).to(u.Mpc).value, 
+    numpy.testing.assert_allclose(nfw_3.scale_radius(1E14, 4.5, 0.3).to(u.Mpc).value, 
                                1.3*nfw_4.scale_radius(1E14, 4.5, 0.3).to(u.Mpc).value)
     nfw_5 = offset_nfw.NFWModel(cosmo, delta=150, rho='rho_c', comoving=False)
-    numpy.testing.assert_almost_equal(nfw_2.scale_radius(1E14, 4, 0.2).to(u.Mpc).value, 
+    numpy.testing.assert_allclose(nfw_2.scale_radius(1E14, 4, 0.2).to(u.Mpc).value, 
                                1.2*nfw_5.scale_radius(1E14, 4, 0.2).to(u.Mpc).value)
-    numpy.testing.assert_almost_equal(nfw_2.scale_radius(1E15, 3, 0.2).to(u.Mpc).value, 
+    numpy.testing.assert_allclose(nfw_2.scale_radius(1E15, 3, 0.2).to(u.Mpc).value, 
                                1.2*nfw_5.scale_radius(1E15, 3, 0.2).to(u.Mpc).value)
-    numpy.testing.assert_almost_equal(nfw_2.scale_radius(1E13, 5, 0.2).to(u.Mpc).value, 
+    numpy.testing.assert_allclose(nfw_2.scale_radius(1E13, 5, 0.2).to(u.Mpc).value, 
                                1.2*nfw_5.scale_radius(1E13, 5, 0.2).to(u.Mpc).value)
-    numpy.testing.assert_almost_equal(nfw_2.scale_radius(1E14, 4, 0.1).to(u.Mpc).value, 
+    numpy.testing.assert_allclose(nfw_2.scale_radius(1E14, 4, 0.1).to(u.Mpc).value, 
                                1.1*nfw_5.scale_radius(1E14, 4, 0.1).to(u.Mpc).value)
-    numpy.testing.assert_almost_equal(nfw_2.scale_radius(1E14, 4.5, 0.3).to(u.Mpc).value, 
+    numpy.testing.assert_allclose(nfw_2.scale_radius(1E14, 4.5, 0.3).to(u.Mpc).value, 
                                1.3*nfw_5.scale_radius(1E14, 4.5, 0.3).to(u.Mpc).value)
     nfw_6 = offset_nfw.NFWModel(cosmo, delta=200, rho='rho_c', comoving=False)
     
@@ -237,6 +200,7 @@ def test_against_galsim_theory():
             angular_pos_y = numpy.zeros_like(angular_pos_x)
             # want tangential shear; galsim gives us 2-component, but all along x-axis, so just use
             # first component with negative sign
+            nfw_1.gamma_theory(radbins, m, c, z, z_source)
             numpy.testing.assert_almost_equal(-galsim_nfw.getShear((angular_pos_x, angular_pos_y), z_source, reduced=False)[0],
                                        nfw_1.gamma_theory(radbins, m, c, z, z_source), decimal=3)
             numpy.testing.assert_almost_equal(galsim_nfw.getConvergence((angular_pos_x, angular_pos_y), z_source), 
@@ -277,6 +241,21 @@ def test_sigma_to_deltasigma_theory():
         plt.xscale('log')
         plt.ylim((0., 2))
         plt.savefig('test.png')
+    for m, c, z in m_c_z_multi_test_list:
+        ds = nfw_1.deltasigma_theory(radbins, m, c, z)
+        sig = nfw_1.sigma_theory(radbins, m, c, z)
+        ds_from_sigma = nfw_1.sigma_to_deltasigma(radbins, sig)
+        import matplotlib.pyplot as plt
+        n_to_keep=int(len(radbins)*0.6)
+        numpy.testing.assert_almost_equal(ds.value[:,-n_to_keep:], ds_from_sigma.value[:,-n_to_keep:], decimal=3)
+        numpy.testing.assert_equal(ds.unit, ds_from_sigma.unit)
+        import matplotlib.pyplot as plt
+        plt.plot(radbins, ds_from_sigma[0]/ds[0], label="ds")
+        plt.plot(radbins, ds_from_sigma[1]/ds[1], label="ds")
+#        plt.plot(radbins, ds_from_sigma, label="ds from sigma")
+        plt.xscale('log')
+        plt.ylim((0., 2))
+        plt.savefig('test.png')
     #TODO: do again, miscentered
         
 def test_z_ratios_theory():
@@ -286,12 +265,12 @@ def test_z_ratios_theory():
     new_z = numpy.linspace(0.15, 1.1, num=20)
     new_gamma = nfw_1.gamma_theory(1, 1.E14, 4, 0.1, new_z)
     new_gamma /= base
-    numpy.testing.assert_almost_equal(new_gamma, cosmo.angular_diameter_distance_z1z2(0.1, new_z)/cosmo.angular_diameter_distance_z1z2(0.1, 0.15)*cosmo.angular_diameter_distance(0.15)/cosmo.angular_diameter_distance(new_z))
+    numpy.testing.assert_allclose(new_gamma, cosmo.angular_diameter_distance_z1z2(0.1, new_z)/cosmo.angular_diameter_distance_z1z2(0.1, 0.15)*cosmo.angular_diameter_distance(0.15)/cosmo.angular_diameter_distance(new_z))
 
     base = nfw_1.kappa_theory(1., 1.E14, 4, 0.1, 0.15)
     new_sigma = nfw_1.kappa_theory(1, 1.E14, 4, 0.1, new_z)
     new_sigma /= base
-    numpy.testing.assert_almost_equal(new_sigma, cosmo.angular_diameter_distance_z1z2(0.1, new_z)/cosmo.angular_diameter_distance_z1z2(0.1, 0.15)*cosmo.angular_diameter_distance(0.15)/cosmo.angular_diameter_distance(new_z))
+    numpy.testing.assert_allclose(new_sigma, cosmo.angular_diameter_distance_z1z2(0.1, new_z)/cosmo.angular_diameter_distance_z1z2(0.1, 0.15)*cosmo.angular_diameter_distance(0.15)/cosmo.angular_diameter_distance(new_z))
     
     #TODO: do again, miscentered
     
@@ -300,8 +279,8 @@ def test_g():
     radbins = numpy.exp(numpy.linspace(numpy.log(0.001), numpy.log(100), num=500))
     nfw_1 = offset_nfw.NFWModel(cosmo, delta=200, rho='rho_c')
     z_source = 4.95
-    for m, c, z in m_c_z_test_list:
-        numpy.testing.assert_equal(nfw_1.g_theory(radbins, m, c, z, z_source), 
+    for m, c, z in m_c_z_test_list+m_c_z_multi_test_list:
+        numpy.testing.assert_allclose(nfw_1.g_theory(radbins, m, c, z, z_source), 
                                    nfw_1.gamma_theory(radbins, m, c, z, z_source)
                                   /(1-nfw_1.kappa_theory(radbins, m, c, z, z_source)))
     
@@ -310,20 +289,70 @@ def test_Upsilon():
     radbins = numpy.exp(numpy.linspace(numpy.log(0.001), numpy.log(100), num=500))
     nfw_1 = offset_nfw.NFWModel(cosmo, delta=200, rho='rho_c')
     for m, c, z in m_c_z_test_list:
-        for i in range(100, 200, 2):
-            r0 = radbins[0]
-            upsilon = nfw_1.Upsilon_theory(radbins, m, c, z, r0)
-            comp = (nfw_1.deltasigma_theory(radbins, m, c, z) 
-                                     - (r0/radbins)**2*nfw_1.deltasigma_theory(r0, m, c, z))
-            print upsilon[0:100]
-            print comp[0:100]
-            numpy.testing.assert_equal(upsilon, 
-                                       nfw_1.deltasigma_theory(radbins, m, c, z) 
-                                     - (r0/radbins)**2*nfw_1.deltasigma_theory(r0, m, c, z))
-            numpy.testing.assert_less_than(0, upsilon[:i])
-            numpy.testing.assert_equal(0, upsilon[i])
-            numpy.testing.assert_greater(0, upsilon[i+1:]) 
+        for r in radbins[100:400:4]:
+            numpy.testing.assert_allclose(nfw_1.Upsilon_theory(radbins, m, c, z, r).value,
+                                       nfw_1.deltasigma_theory(radbins, m, c, z).value 
+                                       - (r/radbins)**2*nfw_1.deltasigma_theory(r, m, c, z).value)
+    for m, c, z in m_c_z_multi_test_list:
+        for r in radbins[100:400:4]:
+            numpy.testing.assert_allclose(nfw_1.Upsilon_theory(radbins, m, c, z, r).value,
+                       nfw_1.deltasigma_theory(radbins, m, c, z).value 
+                       - (r/radbins)**2*nfw_1.deltasigma_theory(r, m, c, z).value[:, numpy.newaxis])
+
+def test_ordering():
+    """ Test that the axes are set up properly for multidimensional inputs."""
+    radbins = numpy.exp(numpy.linspace(numpy.log(0.001), numpy.log(100), num=10))
+    nfw_1 = offset_nfw.NFWModel(cosmo, delta=200, rho='rho_c')
+    m, c, z = m_c_z_test_list[0]
+    zs = [z+0.1, z+0.1, z+1]
     
+    base_result = nfw_1.deltasigma_theory(radbins, m, c, z)
+    comp_m = nfw_1.deltasigma_theory(radbins, [m,m], c, z)
+    numpy.testing.assert_equal(comp_m[0], comp_m[1])
+    numpy.testing.assert_equal(base_result, comp_m[0])
+    comp_c = nfw_1.deltasigma_theory(radbins, m, [c,c], z)
+    numpy.testing.assert_equal(comp_c[0], comp_c[1])
+    numpy.testing.assert_equal(base_result, comp_c[0])
+    comp_z = nfw_1.deltasigma_theory(radbins, m, c, [z,z])
+    numpy.testing.assert_equal(comp_z[0], comp_z[1])
+    numpy.testing.assert_equal(base_result, comp_z[0])
+    
+    sub_base_result = nfw_1.g_theory(radbins, m, c, z, zs[0])
+    base_result = nfw_1.g_theory(radbins, m, c, z, zs)
+    numpy.testing.assert_equal(base_result[0], sub_base_result)
+    numpy.testing.assert_equal(base_result[0], base_result[1])
+    # There's no "assert not equal", so let's try this
+    numpy.testing.assert_raises(AssertionError,
+        numpy.testing.assert_equal, base_result[0], base_result[2])
+    comp_m = nfw_1.g_theory(radbins, [m,m], c, z, zs)
+    numpy.testing.assert_equal(comp_m[:,0], comp_m[:,1])
+    numpy.testing.assert_equal(base_result, comp_m[:,0])
+    numpy.testing.assert_equal(comp_m[0,0], comp_m[0,1])
+    numpy.testing.assert_equal(comp_m[1,0], comp_m[1,1])
+    numpy.testing.assert_equal(comp_m[2,0], comp_m[2,1])
+    numpy.testing.assert_equal(sub_base_result, comp_m[0,0])
+    numpy.testing.assert_raises(AssertionError,
+        numpy.testing.assert_equal, comp_m[1,0], comp_m[2,0])
+    comp_c = nfw_1.g_theory(radbins, m, [c,c], z, zs)
+    numpy.testing.assert_equal(comp_c[:,0], comp_c[:,1])
+    numpy.testing.assert_equal(base_result, comp_c[:,0])
+    numpy.testing.assert_equal(comp_c[0,0], comp_c[0,1])
+    numpy.testing.assert_equal(comp_c[1,0], comp_c[1,1])
+    numpy.testing.assert_equal(comp_c[2,0], comp_c[2,1])
+    numpy.testing.assert_equal(sub_base_result, comp_c[0,0])
+    numpy.testing.assert_raises(AssertionError,
+        numpy.testing.assert_equal, comp_c[1,0], comp_c[2,0])
+    comp_z = nfw_1.g_theory(radbins, m, c, [z,z], zs)
+    numpy.testing.assert_equal(comp_z[:,0], comp_z[:,1])
+    numpy.testing.assert_equal(base_result, comp_z[:,0])
+    numpy.testing.assert_equal(comp_z[0,0], comp_z[0,1])
+    numpy.testing.assert_equal(comp_z[1,0], comp_z[1,1])
+    numpy.testing.assert_equal(comp_z[2,0], comp_z[2,1])
+    numpy.testing.assert_equal(sub_base_result, comp_z[0,0])
+    numpy.testing.assert_raises(AssertionError,
+        numpy.testing.assert_equal, comp_z[1,0], comp_z[2,0])
+
+
     
 def setup_table():
     """ Generate a small interpolation table so we can test its outputs. """
@@ -332,7 +361,6 @@ def setup_table():
 if __name__=='__main__':
     #setup_table()
     test_object_creation()
-    test_form_iterables()
     test_scale_radii()
     test_against_colossus()
     test_z_ratios_theory()
@@ -341,4 +369,5 @@ if __name__=='__main__':
     test_sigma_to_deltasigma_theory()
     test_g()
     test_Upsilon()
+    test_ordering()
 

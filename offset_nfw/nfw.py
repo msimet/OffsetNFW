@@ -1,6 +1,7 @@
 import numpy
 import scipy.interpolate
 import os
+from .utils import reshape, reshape_multisource
 try:
     import multiprocessing
     use_multiprocessing = True
@@ -9,6 +10,8 @@ except ImportError:
 from functools import partial
 
 import astropy.units as u
+
+
 
 class NFWModel(object):
     """
@@ -79,7 +82,7 @@ class NFWModel(object):
         
         # Ordinarily I prefer Python duck-typing, but I want to avoid the case where somebody
         # passes "comoving='physical'" and gets comoving coordinates instead because
-        # if 'physical' evaluates to True!
+        # `if 'physical'` evaluates to True!
         if not isinstance(comoving, bool):
             raise RuntimeError("comoving must be True or False")
         self.comoving = comoving
@@ -174,64 +177,6 @@ class NFWModel(object):
         deltasigma = sum_sigma/sum_area - sigma*sigma_unit
         return deltasigma
         
-    def _get_shape(self, r, *args):
-        if hasattr(r, '__iter__'):
-            shape = list(r.shape)
-        else:
-            shape = []
-        args_1d = [numpy.atleast_1d(a) for a in args]
-        maxlen = max([a.shape for a in args_1d])
-        if numpy.product(maxlen)==1:
-            is_iterable = [hasattr(a, '__iter__') and len(a)>1 for a in args]
-            if numpy.any(is_iterable):
-                shape += list(maxlen)
-        else:
-            shape += list(maxlen)
-        return tuple(shape)
-        
-    def _reformat_shape(self, array, shape):
-        if not shape:
-            while hasattr(array, 'shape') and array.shape:
-                array = array[0]
-        else:
-            array = array.reshape(shape)
-        if isinstance(array, u.Quantity):
-            array = array.decompose()
-            if array.unit == u.dimensionless_unscaled:
-                return array.value
-        return array
-    
-    def _form_iterables(self, r, *args):
-        """ Tile the given inputs for different NFW outputs such that we can make a single call to
-        the interpolation table."""
-        # TODO: check this works for multidimensional *args.
-        is_iterable = [hasattr(a, '__iter__') and len(a)>1 for a in args]
-        if sum(is_iterable)==0:
-            new_tuple = (r,)+args
-            return new_tuple
-        obj_shapes = []
-        for arg, iter in zip(args, is_iterable):
-            if iter:
-                obj_shapes.append(numpy.array(arg).shape)
-        if len(set(obj_shapes))>1:
-            raise RuntimeError("All iterable non-r parameters must have same shape")
-        r = numpy.atleast_1d(r)
-        args = [a if not hasattr(a, '__iter__') else (a if len(a)>1 else a[0]) for a in args]
-        iter_indx = numpy.where(is_iterable)[0][0]
-        arg = args[iter_indx]
-        shape = (-1,) + r.shape
-        temp_arg = numpy.tile(arg, r.shape).reshape(shape)
-        new_r = numpy.tile(r, arg.shape).T
-        shape = temp_arg.shape
-        new_args = [new_r]
-        for arg, iter in zip(args, is_iterable):
-            if iter:
-                new_args.append(numpy.tile(arg, r.shape).reshape(shape[::-1]).T)
-            else:
-                new_args.append(numpy.tile(arg, shape))
-        new_args = [n.reshape(shape) for n in new_args]
-        return new_args
-        
     def reference_density(self, z):
         """Return the reference density for this halo: that is, critical density for rho_c,
            or matter density for rho_m, properly in comoving or physical."""
@@ -263,7 +208,7 @@ class NFWModel(object):
         rs = self.scale_radius(M, c, z)
         return rs*deltac*self.reference_density(z)
 
-                
+    @reshape
     def deltasigma_theory(self, r, M, c, z):
         """Return an NFW delta sigma from theory.
         
@@ -297,8 +242,6 @@ class NFWModel(object):
             (which of course may be only one item!), then this returns an array of shape
             ``(n1, n2, ..., nn, len(r))``.
         """
-        shape = self._get_shape(r, M, c, z)
-        r, M, c, z = self._form_iterables(r, M, c, z)
         rs = self.scale_radius(M, c, z)
         if not isinstance(r, u.Quantity):
             r = r*u.Mpc
@@ -312,10 +255,10 @@ class NFWModel(object):
         return_vals[gtmask] = self._deltasigmagt(x[gtmask])
         eqmask = x==1
         return_vals[eqmask] = self._deltasigmaeq(x[eqmask])
-        return_vals = (norm*return_vals.T).T
-        return self._reformat_shape(return_vals, shape)
+        return_vals = norm*return_vals
+        return return_vals
         
-    
+    @reshape
     def sigma_theory(self, r, M, c, z):
         """Return an NFW sigma from theory.
         
@@ -346,8 +289,6 @@ class NFWModel(object):
             (which of course may be only one item!), then this returns an array of shape
             ``(n1, n2, ..., nn, len(r))``.
         """
-        shape = self._get_shape(r, M, c, z)
-        r, M, c, z = self._form_iterables(r, M, c, z)
         rs = self.scale_radius(M, c, z)
         if not isinstance(r, u.Quantity):
             r = r*u.Mpc
@@ -360,12 +301,10 @@ class NFWModel(object):
         return_vals[gtmask] = self._sigmagt(x[gtmask])
         eqmask = x==1
         return_vals[eqmask] = self._sigmaeq(x[eqmask])
-        if norm.shape==return_vals.shape:
-            return_vals *= norm
-        else:
-            return_vals = norm.T*return_vals
-        return self._reformat_shape(return_vals, shape)
+        return_vals = norm*return_vals #*= doesn't propagate units
+        return return_vals
 
+    @reshape
     def rho_theory(self, r, M, c, z):
         """Return an NFW rho from theory.
         
@@ -396,16 +335,14 @@ class NFWModel(object):
             (which of course may be only one item!), then this returns an array of shape
             ``(n1, n2, ..., nn, len(r))``.
         """
-        shape = self._get_shape(r, M, c, z)
-        r, M, c, z = self._form_iterables(r, M, c, z)
         rs = self.scale_radius(M, c, z)
         if not isinstance(r, u.Quantity):
             r *= u.Mpc
         x = numpy.atleast_1d((r/rs).decompose().value)
         norm = self.nfw_norm(M, c, z)/rs
-        return self._reformat_shape(norm/(x*(1.+x)**2), shape)
+        return norm/(x*(1.+x)**2)
 
-        
+    @reshape        
     def Upsilon_theory(self, r, M, c, z, r0):
         """Return an NFW Upsilon statistic from theory.  
         
@@ -448,12 +385,11 @@ class NFWModel(object):
             (which of course may be only one item!), then this returns an array of shape
             ``(n1, n2, ..., nn, len(r))``.
         """
-        shape = self._get_shape(r, M, c, z, r0)
-        deltasigma = self.deltasigma_theory(r, M, c, z)
-        r, M, c, z, r0 = self._form_iterables(r, M, c, z, r0)
-        return self._reformat_shape(deltasigma-(r0/r)**2*self.deltasigma_theory(r0, M, c, z), shape)
+        return (self.deltasigma_theory(r, M, c, z, skip_reformat=True) 
+                    - (r0/r)**2*self.deltasigma_theory(r0, M, c, z, skip_reformat=True))
 
-    def gamma_theory(self, r, M, c, z_lens, z_source):
+    @reshape_multisource
+    def gamma_theory(self, r, M, c, z_lens, z_source, z_source_pdf=None):
         """Return an NFW tangential shear from theory.
         
         Parameters
@@ -483,13 +419,12 @@ class NFWModel(object):
             (which of course may be only one item!), then this returns an array of shape
             ``(n1, n2, ..., nn, len(r))``.
         """
-        shape = self._get_shape(r, M, c, z_lens, z_source)
-        deltasigma = self.deltasigma_theory(r, M, c, z_lens)
-        r, M, c, z_lens, z_source = self._form_iterables(r, M, c, z_lens, z_source)
+        deltasigma = self.deltasigma_theory(r, M, c, z_lens, skip_reformat=True)
         sci = self.sigma_crit_inverse(z_lens, z_source)
-        return self._reformat_shape(sci*deltasigma, shape)
+        return sci*deltasigma
 
-    def kappa_theory(self, r, M, c, z_lens, z_source):
+    @reshape_multisource
+    def kappa_theory(self, r, M, c, z_lens, z_source, z_source_pdf=None):
         """Return an NFW convergence from theory.
         
         Parameters
@@ -519,13 +454,12 @@ class NFWModel(object):
             (which of course may be only one item!), then this returns an array of shape
             ``(n1, n2, ..., nn, len(r))``.
         """
-        shape = self._get_shape(r, M, c, z_lens, z_source)
-        sigma = self.sigma_theory(r, M, c, z_lens)
-        r, M, c, z_lens, z_source = self._form_iterables(r, M, c, z_lens, z_source)
+        sigma = self.sigma_theory(r, M, c, z_lens, skip_reformat=True)
         sci = self.sigma_crit_inverse(z_lens, z_source)
-        return self._reformat_shape(sci*sigma, shape)
+        return sci*sigma
 
-    def g_theory(self, r, M, c, z_lens, z_source):
+    @reshape_multisource
+    def g_theory(self, r, M, c, z_lens, z_source, z_source_pdf=None):
         """Return an NFW reduced shear from theory.
         
         Parameters
@@ -555,9 +489,10 @@ class NFWModel(object):
             (which of course may be only one item!), then this returns an array of shape
             ``(n1, n2, ..., nn, len(r))``.
         """
-        return (self.gamma_theory(r, M, c, z_lens, z_source)
-                 /(1.-self.kappa_theory(r, M, c, z_lens, z_source)))
+        return (self.gamma_theory(r, M, c, z_lens, z_source, skip_reformat=True)
+                 /(1.-self.kappa_theory(r, M, c, z_lens, z_source, skip_reformat=True)))
 
+    @reshape
     def deltasigma(self, r, M, c, r_mis):
         """Return an optionally miscentered NFW delta sigma from an internal interpolation table.
         
@@ -597,6 +532,7 @@ class NFWModel(object):
         """
         raise NotImplementedError("NFWModel currently can't do delta sigmas!")
 
+    @reshape
     def sigma(self, r, M, c, r_mis):
         """Return an optionally miscentered NFW sigma from an internal interpolation table.
         
@@ -636,6 +572,7 @@ class NFWModel(object):
         """
         raise NotImplementedError("NFWModel currently can't do sigmas!")
 
+    @reshape
     def Upsilon(self, r, M, c, r0, r_mis):
         """Return an optionally miscentered NFW Upsilon statistic from an internal interpolation table.
         
@@ -677,7 +614,8 @@ class NFWModel(object):
         """
         raise NotImplementedError("NFWModel currently can't do upsilon statistics!")
 
-    def gamma(self, r, M, c, r_mis, z_lens, z_source):
+    @reshape_multisource
+    def gamma(self, r, M, c, r_mis, z_lens, z_source, z_source_pdf=None):
         """Return an optionally miscentered NFW tangential shear from an internal interpolation
         table.
         
@@ -717,7 +655,8 @@ class NFWModel(object):
         """
         raise NotImplementedError("NFWModel currently can't do tangential shear!")
 
-    def kappa(self, r, M, c, r_mis, z_lens, z_source):
+    @reshape_multisource
+    def kappa(self, r, M, c, r_mis, z_lens, z_source, z_source_pdf=None):
         """Return an optionally miscentered NFW convergence from an internal interpolation table.
         
         Parameters
@@ -755,8 +694,9 @@ class NFWModel(object):
             ``(n1, n2, ..., nn, len(r))``.
         """
         raise NotImplementedError("NFWModel currently can't do convergence!")
-       
-    def g(self, r, M, c, r_mis, z_lens, z_source):
+
+    @reshape_multisource       
+    def g(self, r, M, c, r_mis, z_lens, z_source, z_source_pdf=None):
         """Return an optionally miscentered NFW reduced shear from an internal interpolation table.
         
         Parameters
@@ -795,6 +735,7 @@ class NFWModel(object):
         """
         raise NotImplementedError("NFWModel currently can't do reduced shear!")
 
+    @reshape
     def deltasigma_Rayleigh(self, r, M, c, r_mis, P_cen):
         """Return an NFW delta sigma from an internal interpolation table, assuming that the
         miscentering takes the form of a Rayleigh (2d Gaussian) distribution plus a delta function:
@@ -838,6 +779,7 @@ class NFWModel(object):
         raise NotImplementedError("NFWModel currently can't do delta sigmas with Rayleigh "+
                 "distributions!")
 
+    @reshape
     def sigma_Rayleigh(self, r, M, c, r_mis, P_cen):
         """Return an NFW sigma from an internal interpolation table, assuming that the
         miscentering takes the form of a Rayleigh (2d Gaussian) distribution plus a delta function:
@@ -880,6 +822,7 @@ class NFWModel(object):
         """
         raise NotImplementedError("NFWModel currently can't do sigmas with Rayleigh distributions!")
 
+    @reshape
     def Upsilon_Rayleigh(self, r, M, c, r0, r_mis, P_cen):
         """Return an NFW Upsilon statistic from an internal interpolation table, assuming that the
         miscentering takes the form of a Rayleigh (2d Gaussian) distribution plus a delta function:
@@ -925,7 +868,8 @@ class NFWModel(object):
         raise NotImplementedError("NFWModel currently can't do upsilon statistics with Rayleigh "+
                 "distributions!")
 
-    def gamma_Rayleigh(self, r, M, c, r_mis, P_cen, z_lens, z_source):
+    @reshape_multisource
+    def gamma_Rayleigh(self, r, M, c, r_mis, P_cen, z_lens, z_source, z_source_pdf=None):
         """Return an NFW tangential shear from an internal interpolation table, assuming that the
         miscentering takes the form of a Rayleigh (2d Gaussian) distribution plus a delta function:
         fraction `0<P_cen<1` of the halos have correct centers, while the ones which are miscentered
@@ -967,8 +911,9 @@ class NFWModel(object):
         """
         raise NotImplementedError("NFWModel currently can't do tangential shear with Rayleigh "+
                 "distributions!")
-    
-    def kappa_Rayleigh(self, r, M, c, r_mis, P_cen, z_lens, z_source):
+
+    @reshape_multisource    
+    def kappa_Rayleigh(self, r, M, c, r_mis, P_cen, z_lens, z_source, z_source_pdf=None):
         """Return an NFW convergence from an internal interpolation table, assuming that the
         miscentering takes the form of a Rayleigh (2d Gaussian) distribution plus a delta function:
         fraction `0<P_cen<1` of the halos have correct centers, while the ones which are miscentered
@@ -1011,7 +956,8 @@ class NFWModel(object):
         raise NotImplementedError("NFWModel currently can't do convergence with Rayleigh "+
                 "distributions!")
     
-    def g_Rayleigh(self, r, M, c, r_mis, P_cen, z_lens, z_source):
+    @reshape_multisource
+    def g_Rayleigh(self, r, M, c, r_mis, P_cen, z_lens, z_source, z_source_pdf=None):
         """Return an NFW reduced shear from an internal interpolation table, assuming that the
         miscentering takes the form of a Rayleigh (2d Gaussian) distribution plus a delta function:
         fraction `0<P_cen<1` of the halos have correct centers, while the ones which are miscentered
