@@ -297,7 +297,7 @@ def test_Upsilon():
         for r in radbins[100:400:4]:
             numpy.testing.assert_allclose(nfw_1.Upsilon_theory(radbins, m, c, z, r).value,
                        nfw_1.deltasigma_theory(radbins, m, c, z).value 
-                       - (r/radbins)**2*nfw_1.deltasigma_theory(r, m, c, z).value)
+                       - (r/radbins)**2*nfw_1.deltasigma_theory(r, m, c, z).value[:, numpy.newaxis])
 
 def test_ordering():
     """ Test that the axes are set up properly for multidimensional inputs."""

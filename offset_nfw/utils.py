@@ -17,7 +17,7 @@ def _form_iterables(*args):
     # Don't do anything if everything non-r is a scalar, or if r is a scalar
     is_iterable = [hasattr(a, '__iter__') and len(a)>1 for a in args]
     if sum(is_iterable)==0 or (len(r)==1 and not hasattr(original_args[0], "__iter__")):
-        return original_args
+        return [numpy.array(o) if hasattr(o,'__iter__') else o for o in original_args]
     # Check everything that isn't r is the same shape
     obj_shapes = []
     for arg, iter in zip(args, is_iterable):
@@ -51,9 +51,9 @@ def _form_iterables_multisource(nargs, *args):
     if r_is_iterable+sz_is_iterable+sum(is_iterable)<2:
         if len(original_args)==nargs-1:
             # Ensure consistency with the rest of this fn, which ignores z_source_pdf
-            return original_args[:-1]
+            return [numpy.array(o) if hasattr(o,'__iter__') else o for o in original_args[:-1]]
         else:
-            return original_args
+            return [numpy.array(o) if hasattr(o,'__iter__') else o for o in original_args]
     # or if z_source is not iterable, we can use the function for the 2d broadcasting
     elif sum(is_iterable)==0 or not sz_is_iterable:
         if len(original_args)==nargs-1:
