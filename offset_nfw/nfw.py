@@ -43,8 +43,6 @@ class NFWModel(object):
     dir : str
         The directory where the saved tables should be stored (will be interpreted through
         ``os.path``). [default: '.']
-    generate : boolean
-        if True, generate tables; if False, try to read them from disk. [default: False]
     rho : str
         Which type of overdensity to use for the halo, 'rho_m' or 'rho_c'. [default: 'rho_m']
     comoving: bool
@@ -56,16 +54,10 @@ class NFWModel(object):
     x_range : tuple
         The min-max range of x (=r/r_s) for the interpolation table. Precision is not guaranteed for 
         values other than the default.  [default: (0.0003, 300)]
-    miscentering_range : tuple
-        The min-max range of the rescaled miscentering radius (=r_mis/r_s) for the interpolation 
-        table. Precision is not guaranteed for values other than the default.
-        [default: (0.0003, 300)]
     """
     def __init__(self, cosmology, dir='.', rho='rho_m', comoving=True, delta=200,
-        precision=0.01, x_range=(0.0003, 300), miscentering_range=(0,4), generate=False):
-        if generate:
-            raise NotImplementedError("NFWModel currently can't do interpolation tables!")
-            
+        precision=0.01, x_range=(0.0003, 300)):
+
         if not os.path.exists(dir):
             raise RuntimeError("Nonexistent save directory passed to NFWModel")
         self.dir = dir
@@ -112,17 +104,11 @@ class NFWModel(object):
             numpy.array(x_range, dtype=float)
         except:
             raise RuntimeError("X range must be composed of real numbers")
+        if x_range[0]<=0 or x_range[1]<=0:
+            raise RuntimeError("X range must be >=0")
+        if x_range[0]>x_range[1]:
+            x_range = [x_range[1], x_range[0]]
         self.x_range = x_range
-        if not hasattr(miscentering_range, '__iter__'):
-            raise RuntimeError("miscentering range must be a length-2 tuple")
-        miscentering_range = numpy.asarray(miscentering_range)
-        if numpy.product(miscentering_range.shape)!=2 or len(miscentering_range)!=2:
-            raise RuntimeError("miscentering range must be a length-2 tuple")
-        try:
-            numpy.array(miscentering_range, dtype=float)
-        except:
-            raise RuntimeError("Miscentering range must be composed of real numbers")
-        self.miscentering_range = miscentering_range
         
         # Useful quantity in scaling profiles
         self._rmod = (3./(4.*numpy.pi)/self.delta)**0.33333333
@@ -133,7 +119,40 @@ class NFWModel(object):
             from functools import partial
             from .cosmology import sigma_crit_inverse
             self.sigma_crit_inverse = partial(sigma_crit_inverse, self.cosmology)
-            
+
+    def generate(self, do_sigma=True, do_deltasigma=True, do_rayleigh=False, do_exponential=False):
+        self._setupTables()
+        return
+        if do_rayleigh:
+            self._setupRayleighProbabilities()
+        if do_exponential:
+            self.setupExponentialProbabilities()
+        if do_sigma or do_deltasigma:
+            self._setupSigma()
+            self._buildSigma()
+            self._setupMiscenteredSigma()
+            if do_rayleigh and do_sigma:
+                self._buildRayleighSigma()
+            if do_exponential and do_sigma:
+                self._buildExponentialSigma()
+        if do_deltasigma:
+            self._buildMiscenteredSigma()
+            self._setupMiscenteredDeltaSigma()
+            if do_rayleigh:
+                self._buildRayleighDeltaSigma()
+            if do_exponential:
+                self._buildExponentialDeltaSigma()
+
+    def _setupTables(self):
+        self.table_x = numpy.logspace(numpy.log10(self.x_range[0]), numpy.log10(self.x_range[1]), 
+                                      num=int(50./self.precision))
+        self.x_min = numpy.min(self.table_x)
+        self.x_max = numpy.max(self.table_x)
+        self.dx = self.table_x[1]/self.table_x[0]
+        table_angle = numpy.linspace(0, 2.*numpy.pi, int(2.*numpy.pi/self.precision))
+        self.cos_theta_table = numpy.cos(table_angle)[:, numpy.newaxis]
+
+
     # Per Brainerd and Wright (arXiv:), these are the analytic descriptions of the 
     # NFW lensing profiles.
     def _deltasigmalt(self,x):
@@ -195,6 +214,8 @@ class NFWModel(object):
 
     def scale_radius(self, M, c, z):
         """ Return the scale radius in comoving Mpc. """
+        c = numpy.asarray(c)
+        z = numpy.asarray(z)
         if not isinstance(M, u.Quantity):
             M = (M*u.Msun).to(u.g)
         rs = self._rmod/c*(M/self.reference_density(z))**0.33333333
@@ -202,8 +223,10 @@ class NFWModel(object):
 
     def nfw_norm(self, M, c, z):
         """ Return the normalization for delta sigma and sigma. """
+        c = numpy.asarray(c)
+        z = numpy.asarray(z)
         if not isinstance(M, u.Quantity):
-            M = (M*u.Msun).to(u.g)
+            M = (numpy.asarray(M)*u.Msun).to(u.g)
         deltac=self.delta/3.*c*c*c/(numpy.log(1.+c)-c/(1.+c))
         rs = self.scale_radius(M, c, z)
         return rs*deltac*self.reference_density(z)

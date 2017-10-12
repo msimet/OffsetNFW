@@ -54,21 +54,15 @@ def test_object_creation():
     # Should work
     offset_nfw.NFWModel(cosmology_obj, x_range=[3,4])
     # Non-working ranges
-    numpy.testing.assert_raises(RuntimeError, offset_nfw.NFWModel, cosmology_obj, miscentering_range=3)
-    numpy.testing.assert_raises(RuntimeError, offset_nfw.NFWModel, cosmology_obj, miscentering_range=(3,4,5))
-    numpy.testing.assert_raises(RuntimeError, offset_nfw.NFWModel, cosmology_obj, miscentering_range=('a', 'b'))
-    # Should work
-    offset_nfw.NFWModel(cosmology_obj, miscentering_range=[3,4])
-    
+
     obj = offset_nfw.NFWModel(cosmology_obj, '.', 'rho_m', delta=150, precision=0.02, x_range=(0.1,2), 
-                       miscentering_range=(0.1,2), comoving=False)
+                       comoving=False)
     numpy.testing.assert_equal(obj.cosmology, cosmology_obj)
     numpy.testing.assert_equal(obj.dir, '.')
     numpy.testing.assert_equal(obj.rho, 'rho_m')
     numpy.testing.assert_equal(obj.delta, 150)
     numpy.testing.assert_equal(obj.precision, 0.02)
     numpy.testing.assert_equal(obj.x_range, (0.1,2))
-    numpy.testing.assert_equal(obj.miscentering_range, (0.1,2))
     numpy.testing.assert_equal(obj.comoving, False)
     
     # Should work
@@ -356,10 +350,25 @@ def test_ordering():
     
 def setup_table():
     """ Generate a small interpolation table so we can test its outputs. """
-    nfw_halo = offset_nfw.NFWModel(cosmo, generate=True, x_range=(0.1, 2), miscentering_range=(0, 0.2))
+    cosmology_obj = fake_cosmo()
+    for xr in [(0.1, 0.2), (0.57, 1.83), (5,7)]:
+        nfw_halo = offset_nfw.NFWModel(fake_cosmo, x_range=xr)
+        nfw_halo._setupTables()
+        numpy.testing.assert_array_almost_equal_nulp(nfw_halo.table_x[0], xr[0])
+        numpy.testing.assert_array_almost_equal_nulp(nfw_halo.table_x[-1], xr[1])
+        numpy.testing.assert_array_almost_equal_nulp(nfw_halo.table_x[0], nfw_halo.x_min)
+        numpy.testing.assert_array_almost_equal_nulp(nfw_halo.table_x[-1], nfw_halo.x_max)
+    numpy.testing.assert_raises(RuntimeError, offset_nfw.NFWModel, fake_cosmo, x_range=[-1,1])
+    nfw_halo = offset_nfw.NFWModel(fake_cosmo, x_range=[1.0,2.0])
+    nfw_halo._setupTables()
+    costheta = nfw_halo.cos_theta_table.flatten()
+    numpy.testing.assert_equal(costheta[0], 1.)
+    numpy.testing.assert_approx_equal(costheta[-1], 1.)
+    numpy.testing.assert_approx_equal(costheta[len(costheta)/2], -1., significant=4)
+        
     
 if __name__=='__main__':
-    #setup_table()
+    setup_table()
     test_object_creation()
     test_scale_radii()
     test_against_colossus()
