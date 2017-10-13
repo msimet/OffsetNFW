@@ -196,8 +196,31 @@ class NFWModel(object):
     def _setupMiscenteredDeltaSigma(self):
         self._miscentered_deltasigma_table = scipy.interpolate.RegularGridInterpolator(
             (numpy.log(self.table_x), numpy.log(self.table_x)), self._miscentered_deltasigma)
-        
-        
+
+    def _buildRayleighProbabilities(self):
+        logr_interval = self.table_x[1]/self.table_x[0]
+        logr_mult = numpy.sqrt(logr_interval)-1./numpy.sqrt(logr_interval)
+        self.rayleigh_p = self.table_x/self.table_x[:,numpy.newaxis]**2*numpy.exp(-0.5*(self.table_x/self.table_x[:,numpy.newaxis])**2)*(self.table_x*logr_mult) # last term is dx!
+        # This accounts for the fact that we don't go from x=0 to infinity.
+        # Comment out this line to check accuracy (tends to be off by ~5% for typical precision and
+        # xrange, but note that the missing weights are multiplying things at large radii where the
+        # signal is small.
+        # self.rayleigh_orig stores the original sum for cross-checks.
+        self._rayleigh_orig = numpy.sum(self.rayleigh_p, axis=1)[:, numpy.newaxis]
+        self.rayleigh_p /= self._rayleigh_orig
+
+    def _buildExponentialProbabilities(self):
+        logr_interval = self.table_x[1]/self.table_x[0]
+        logr_mult = numpy.sqrt(logr_interval)-1./numpy.sqrt(logr_interval)
+        self.exponential_p = self.table_x/self.table_x[:,numpy.newaxis]**2*numpy.exp(-self.table_x/self.table_x[:, numpy.newaxis])*self.table_x*logr_mult # last term is dx!
+        # This accounts for the fact that we don't go from x=0 to infinity.
+        # Comment out this line to check accuracy (tends to be off by ~5% for typical precision and
+        # xrange, but note that the missing weights are multiplying things at large radii where the
+        # signal is small.
+        # self.exponential_orig stores the original sum for cross-checks.
+        self._exponential_orig = numpy.sum(self.exponential_p, axis=1)[:, numpy.newaxis]
+        self.exponential_p /= self._exponential_orig
+
     # Per Brainerd and Wright (arXiv:), these are the analytic descriptions of the 
     # NFW lensing profiles.
     def _deltasigmalt(self,x):

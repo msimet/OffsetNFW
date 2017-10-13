@@ -434,9 +434,53 @@ def test_build_miscentered_deltasigma():
                 mean_ds = 0.5*(nfw_halo._miscentered_deltasigma[i,j]+nfw_halo._miscentered_deltasigma[i+1,j])
                 numpy.testing.assert_approx_equal(nfw_halo._miscentered_deltasigma_table((numpy.log(mean_x), numpy.log(nfw_halo.table_x[j]))), mean_ds)
         
+def test_probabilities():
+    import scipy.interpolate
+    cosmology_obj = fake_cosmo()
+    nfw_halo = offset_nfw.NFWModel(cosmology_obj)
+    nfw_halo._setupTables()
+    nfw_halo._buildRayleighProbabilities()
+    nfw_halo._buildExponentialProbabilities()
+
+    n = len(nfw_halo.table_x)
+    x_min = nfw_halo.x_min
+    x_max = nfw_halo.x_max
+    random_x = x_min+(x_max-x_min)*numpy.random.random(10)
+    random_xmis = x_min+(x_max-x_min)*numpy.random.random(10)
+    logr_interval = nfw_halo.table_x[1]/nfw_halo.table_x[0]
+    logr_mult = numpy.sqrt(logr_interval)-1./numpy.sqrt(logr_interval)
+    dx = logr_mult*nfw_halo.table_x
+
+    this_rayleigh = nfw_halo.rayleigh_p*nfw_halo._rayleigh_orig/dx
+    rayleigh_table = scipy.interpolate.RegularGridInterpolator(
+        (numpy.log(nfw_halo.table_x), numpy.log(nfw_halo.table_x)),
+        this_rayleigh)
+    numpy.testing.assert_approx_equal(numpy.sum(nfw_halo.rayleigh_p), n)
+    numpy.testing.assert_array_almost_equal(numpy.sum(nfw_halo.rayleigh_p, axis=1), numpy.ones(n))
+    numpy.testing.assert_array_almost_equal(rayleigh_table((numpy.log(random_xmis), numpy.log(random_x))),
+        random_x/random_xmis**2*numpy.exp(-0.5*(random_x**2/random_xmis**2)))
+    # Test integral rayleigh table *x, which should come out to sqrt(pi/2)*x_miscentering.
+    # Chop off the bottom quarter and the top quarter, which hit the edges too much
+    q = int(0.25*n)
+    numpy.testing.assert_array_almost_equal(numpy.sum(nfw_halo.table_x*nfw_halo.rayleigh_p,axis=1)[q:-q],
+        numpy.sqrt(numpy.pi/2)*nfw_halo.table_x[q:-q], decimal=4)
+
+    this_exponential = nfw_halo.exponential_p*nfw_halo._exponential_orig/dx
+    exponential_table = scipy.interpolate.RegularGridInterpolator(
+        (numpy.log(nfw_halo.table_x), numpy.log(nfw_halo.table_x)),
+        this_exponential)
+    numpy.testing.assert_approx_equal(numpy.sum(nfw_halo.exponential_p), n)
+    numpy.testing.assert_array_almost_equal(numpy.sum(nfw_halo.exponential_p, axis=1), numpy.ones(n))
+    numpy.testing.assert_array_almost_equal(exponential_table((numpy.log(random_xmis), numpy.log(random_x))),
+        random_x/random_xmis**2*numpy.exp(-random_x/random_xmis))
+    # Test integral exponential table *x, which should come out to 2*x_miscentering.
+    # Chop off the bottom quarter and the top quarter, which hit the edges too much
+    numpy.testing.assert_array_almost_equal(numpy.sum(nfw_halo.table_x*nfw_halo.exponential_p,axis=1)[q:-q],
+        2*nfw_halo.table_x[q:-q], decimal=4)
         
     
 if __name__=='__main__':
+    test_probabilities()
     test_object_creation()
     test_scale_radii()
     test_against_colossus()
