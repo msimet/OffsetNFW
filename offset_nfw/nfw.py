@@ -177,7 +177,14 @@ class NFWModel(object):
         self._miscentered_sigma_table = scipy.interpolate.RegularGridInterpolator(
             (numpy.log(self.table_x), numpy.log(self.table_x)), self._miscentered_sigma)
 
-        
+    def _buildMiscenteredDeltaSigma(self):
+        self._miscentered_deltasigma = numpy.array([self.sigma_to_deltasigma(self.table_x, ms) for ms in self._miscentered_sigma])
+
+    def _setupMiscenteredDeltaSigma(self):
+        self._miscentered_deltasigma_table = scipy.interpolate.RegularGridInterpolator(
+            (numpy.log(self.table_x), numpy.log(self.table_x)), self._miscentered_deltasigma)
+
+
         
     # Per Brainerd and Wright (arXiv:), these are the analytic descriptions of the 
     # NFW lensing profiles.
@@ -218,8 +225,14 @@ class NFWModel(object):
         sigma_r = 2*numpy.pi*r*sigma
         sum_sigma = scipy.integrate.cumtrapz(sigma_r, r, initial=0)*sigma_unit*r_unit**2
         sum_area = numpy.pi*(r**2-r[0]**2)*r_unit**2
-        
-        deltasigma = sum_sigma/sum_area - sigma*sigma_unit
+        deltasigma = numpy.zeros_like(sum_sigma)
+        # Linearly interpolate central value, which is nan due to sum_area==0
+        if len(deltasigma.shape)==1:
+            deltasigma[1:] = sum_sigma[1:]/sum_area[1:] - sigma[1:]*sigma_unit        
+            deltasigma[0] = 2*deltasigma[1]-deltasigma[2]
+        else:
+            deltasigma[:,1:] = sum_sigma[:,1:]/sum_area[1:] - sigma[:,1:]*sigma_unit        
+            deltasigma[:,0] = 2*deltasigma[:,1]-deltasigma[:,2]
         return deltasigma
         
     def reference_density(self, z):
