@@ -400,6 +400,22 @@ def test_build_miscentered_sigma():
                 numpy.testing.assert_approx_equal(nfw_halo._miscentered_sigma[i][j],
                                                   nfw_halo._miscentered_sigma[j][i])
 
+def test_build_deltasigma():
+    # Just test that it runs--we'll test the real values against sigma_theory later.
+    cosmology_obj = fake_cosmo()
+    for xr in [(0.1,0.99), (1.01,2.0), (1.0, 2.0), (0.1,2.0)]:
+        nfw_halo = offset_nfw.NFWModel(cosmology_obj, x_range=xr)
+        nfw_halo._setupTables()
+        nfw_halo._buildDeltaSigma()
+        numpy.testing.assert_equal(nfw_halo._deltasigma.shape, (len(nfw_halo.table_x),)) 
+        numpy.testing.assert_array_less(0, nfw_halo._deltasigma)
+        nfw_halo._setupDeltaSigma()
+        for i in range(0,200,20):
+            mean_x = numpy.sqrt(nfw_halo.table_x[i]*nfw_halo.table_x[i+1])
+            mean_ds = 0.5*(nfw_halo._deltasigma[i]+nfw_halo._deltasigma[i+1])
+            numpy.testing.assert_approx_equal(nfw_halo._deltasigma_table(numpy.log(mean_x)), mean_ds)
+
+
 def test_build_miscentered_deltasigma():
     cosmology_obj = fake_cosmo()
     for xr in [(0.1,0.99), (1.01,2.0), (1.0, 2.0), (0.1,2.0)]:
@@ -421,7 +437,6 @@ def test_build_miscentered_deltasigma():
         
     
 if __name__=='__main__':
-    test_build_miscentered_deltasigma()
     test_object_creation()
     test_scale_radii()
     test_against_colossus()
@@ -435,4 +450,6 @@ if __name__=='__main__':
     test_setup_table()
     test_build_sigma()
     test_build_miscentered_sigma()
+    test_build_deltasigma()
+    test_build_miscentered_deltasigma()
 

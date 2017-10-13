@@ -177,14 +177,26 @@ class NFWModel(object):
         self._miscentered_sigma_table = scipy.interpolate.RegularGridInterpolator(
             (numpy.log(self.table_x), numpy.log(self.table_x)), self._miscentered_sigma)
 
+    def _buildDeltaSigma(self):
+        self._deltasigma = numpy.zeros_like(self.table_x)
+        xm = self.table_x<1
+        self._deltasigma[xm] = self._deltasigmalt(self.table_x[xm])
+        xm = self.table_x==1
+        self._deltasigma[xm] = self._deltasigmaeq(self.table_x[xm])
+        xm = self.table_x>1
+        self._deltasigma[xm] = self._deltasigmagt(self.table_x[xm])
+
+    def _setupDeltaSigma(self):
+        self._deltasigma_table = scipy.interpolate.interp1d(numpy.log(self.table_x), self._deltasigma,
+                                                       fill_value=0, bounds_error=False)
+
     def _buildMiscenteredDeltaSigma(self):
         self._miscentered_deltasigma = numpy.array([self.sigma_to_deltasigma(self.table_x, ms) for ms in self._miscentered_sigma])
 
     def _setupMiscenteredDeltaSigma(self):
         self._miscentered_deltasigma_table = scipy.interpolate.RegularGridInterpolator(
             (numpy.log(self.table_x), numpy.log(self.table_x)), self._miscentered_deltasigma)
-
-
+        
         
     # Per Brainerd and Wright (arXiv:), these are the analytic descriptions of the 
     # NFW lensing profiles.
