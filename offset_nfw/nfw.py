@@ -122,7 +122,6 @@ class NFWModel(object):
 
     def generate(self, do_sigma=True, do_deltasigma=True, do_rayleigh=False, do_exponential=False):
         self._setupTables()
-        return
         if do_rayleigh:
             self._setupRayleighProbabilities()
         if do_exponential:
@@ -153,6 +152,33 @@ class NFWModel(object):
         self.cos_theta_table = numpy.cos(table_angle)[:, numpy.newaxis]
 
 
+    def _buildSigma(self):
+        self._sigma = numpy.zeros_like(self.table_x)
+        xm = self.table_x<1
+        self._sigma[xm] = self._sigmalt(self.table_x[xm])
+        xm = self.table_x==1
+        self._sigma[xm] = self._sigmaeq(self.table_x[xm])
+        xm = self.table_x>1
+        self._sigma[xm] = self._sigmagt(self.table_x[xm])
+
+    def _setupSigma(self):
+        self._sigma_table = scipy.interpolate.interp1d(numpy.log(self.table_x), self._sigma,
+                                                       fill_value=0, bounds_error=False)
+
+    def _buildMiscenteredSigma(self):
+        self._miscentered_sigma = numpy.array([numpy.sum(
+            self._sigma_table(
+                0.5*numpy.log(
+                    self.table_x*self.table_x+tx*tx
+                        +2*self.table_x*self.cos_theta_table*tx)),axis=0) for tx in self.table_x])
+        # TODO: figure out if you need to trim egregious problems        
+
+    def _setupMiscenteredSigma(self):
+        self._miscentered_sigma_table = scipy.interpolate.RegularGridInterpolator(
+            (numpy.log(self.table_x), numpy.log(self.table_x)), self._miscentered_sigma)
+
+        
+        
     # Per Brainerd and Wright (arXiv:), these are the analytic descriptions of the 
     # NFW lensing profiles.
     def _deltasigmalt(self,x):
