@@ -478,9 +478,52 @@ def test_probabilities():
     numpy.testing.assert_array_almost_equal(numpy.sum(nfw_halo.table_x*nfw_halo.exponential_p,axis=1)[q:-q],
         2*nfw_halo.table_x[q:-q], decimal=4)
         
+def test_probability_signal_tables():
+    # Spot-check that the *rows* of the miscentered table are the radial dependence of a
+    # miscentered profile, properly summed.
+    cosmology_obj = fake_cosmo()
+    nfw_halo = offset_nfw.NFWModel(cosmology_obj, precision=1)
+    nfw_halo._setupTables()
+    nfw_halo._buildSigma()
+    nfw_halo._setupSigma()
+    nfw_halo._buildMiscenteredSigma()
+    nfw_halo._buildMiscenteredDeltaSigma()
+    nfw_halo._buildRayleighProbabilities()
+    nfw_halo._buildExponentialProbabilities()
+    nfw_halo._buildRayleighSigma()
+    nfw_halo._buildExponentialSigma()
+    nfw_halo._buildRayleighDeltaSigma()
+    nfw_halo._buildExponentialDeltaSigma()
+
+    n = len(nfw_halo.table_x)
+    check_rows = numpy.random.randint(0,n,n/10)
+    for row in check_rows:
+        test_point = numpy.sum(nfw_halo.exponential_p[row]*nfw_halo._miscentered_sigma[:,1])
+        numpy.testing.assert_equal(test_point, nfw_halo._exponential_sigma[row,1]) 
+        test_row = numpy.sum(nfw_halo.exponential_p[row, numpy.newaxis]*nfw_halo._miscentered_sigma, axis=1)
+        numpy.testing.assert_equal(test_row, nfw_halo._exponential_sigma[row])
+        test_point = numpy.sum(nfw_halo.rayleigh_p[row]*nfw_halo._miscentered_sigma[:,1])
+        numpy.testing.assert_equal(test_point, nfw_halo._rayleigh_sigma[row,1]) 
+        test_row = numpy.sum(nfw_halo.rayleigh_p[row, numpy.newaxis]*nfw_halo._miscentered_sigma, axis=1)
+        numpy.testing.assert_equal(test_row, nfw_halo._rayleigh_sigma[row])
+        
+    nfw_halo._setupRayleighSigma()
+    nfw_halo._setupExponentialSigma()
+    nfw_halo._setupRayleighDeltaSigma()
+    nfw_halo._setupExponentialDeltaSigma()
+    for i in range(0,n-1,n/10):
+        for j in range(0,n-1,n/10):
+            mean_x = numpy.sqrt(nfw_halo.table_x[i]*nfw_halo.table_x[i+1])
+            mean_ds = 0.5*(nfw_halo._rayleigh_sigma[i,j]+nfw_halo._rayleigh_sigma[i+1,j])
+            numpy.testing.assert_approx_equal(nfw_halo._rayleigh_sigma_table((numpy.log(mean_x), numpy.log(nfw_halo.table_x[j]))), mean_ds)
+            mean_ds = 0.5*(nfw_halo._rayleigh_deltasigma[i,j]+nfw_halo._rayleigh_deltasigma[i+1,j])
+            numpy.testing.assert_approx_equal(nfw_halo._rayleigh_deltasigma_table((numpy.log(mean_x), numpy.log(nfw_halo.table_x[j]))), mean_ds)
+            mean_ds = 0.5*(nfw_halo._exponential_sigma[i,j]+nfw_halo._exponential_sigma[i+1,j])
+            numpy.testing.assert_approx_equal(nfw_halo._exponential_sigma_table((numpy.log(mean_x), numpy.log(nfw_halo.table_x[j]))), mean_ds)
+            mean_ds = 0.5*(nfw_halo._exponential_deltasigma[i,j]+nfw_halo._exponential_deltasigma[i+1,j])
+            numpy.testing.assert_approx_equal(nfw_halo._exponential_deltasigma_table((numpy.log(mean_x), numpy.log(nfw_halo.table_x[j]))), mean_ds)
     
 if __name__=='__main__':
-    test_probabilities()
     test_object_creation()
     test_scale_radii()
     test_against_colossus()
@@ -496,4 +539,6 @@ if __name__=='__main__':
     test_build_miscentered_sigma()
     test_build_deltasigma()
     test_build_miscentered_deltasigma()
+    test_probabilities()
+    test_probability_signal_tables()
 

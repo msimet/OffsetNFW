@@ -221,6 +221,28 @@ class NFWModel(object):
         self._exponential_orig = numpy.sum(self.exponential_p, axis=1)[:, numpy.newaxis]
         self.exponential_p /= self._exponential_orig
 
+    def _buildRayleighSigma(self):
+        self._rayleigh_sigma = numpy.sum(self.rayleigh_p[:, numpy.newaxis]*self._miscentered_sigma, axis=2)
+    def _setupRayleighSigma(self):
+        self._rayleigh_sigma_table = scipy.interpolate.RegularGridInterpolator((numpy.log(self.table_x), numpy.log(self.table_x)), self._rayleigh_sigma)
+
+    def _buildRayleighDeltaSigma(self):
+        self._rayleigh_deltasigma = numpy.array([self.sigma_to_deltasigma(self.table_x, rs) for rs in self._rayleigh_sigma])
+    def _setupRayleighDeltaSigma(self):
+        self._rayleigh_deltasigma_table = scipy.interpolate.RegularGridInterpolator((numpy.log(self.table_x), numpy.log(self.table_x)), self._rayleigh_deltasigma)
+
+    def _buildExponentialSigma(self):
+        self._exponential_sigma = numpy.sum(self.exponential_p[:, numpy.newaxis]*self._miscentered_sigma, axis=2)
+    def _setupExponentialSigma(self):
+        self._exponential_sigma_table = scipy.interpolate.RegularGridInterpolator((numpy.log(self.table_x), numpy.log(self.table_x)), self._exponential_sigma)
+
+    def _buildExponentialDeltaSigma(self):
+        self._exponential_deltasigma = numpy.array([self.sigma_to_deltasigma(self.table_x, es) for es in self._exponential_sigma])
+    def _setupExponentialDeltaSigma(self):
+        self._exponential_deltasigma_table = scipy.interpolate.RegularGridInterpolator((numpy.log(self.table_x), numpy.log(self.table_x)), self._exponential_deltasigma)
+
+        
+        
     # Per Brainerd and Wright (arXiv:), these are the analytic descriptions of the 
     # NFW lensing profiles.
     def _deltasigmalt(self,x):
