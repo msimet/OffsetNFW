@@ -734,45 +734,24 @@ def test_z_ratios_interp():
 
 if __name__=='__main__':
     test_object_creation()
-    print "done with object creation"
     test_scale_radii()
-    print "done with scale radii"
     test_against_colossus()
-    print "done with colossus"
     test_z_ratios_theory()
-    print "done with z ratios theory"
     test_against_galsim_theory()
-    print "done with galsim theory"
     test_against_clusterlensing_theory()
-    print "done with clusterlensing theory"
     test_sigma_to_deltasigma_theory()
-    print "done with sigma_to_deltasigma_theory"
     test_g()
-    print "done with g"
     test_Upsilon()
-    print "done with Upsilon"
     test_ordering()
-    print "done with ordering"
     test_setup_table()
-    print "done with setup table"
     test_build_sigma()
-    print "done with build sigma"
     test_build_miscentered_sigma()
-    print "done with build miscentered sigma"
     test_build_deltasigma()
-    print "done with build deltasigma"
     test_build_miscentered_deltasigma()
-    print "done with build miscentered deltasigma"
     test_probabilities()
-    print "done with probabilities"
     test_probability_signal_tables()
-    print "done with probability signal tables"
     test_generation()
-    print "done with generation"
     test_table_saving()
-    print "done with table saving"
     test_interpolated_signals()
-    print "done with interpolated signals"
     test_z_ratios_interp()
-    print "done with z ratios interp"
 
