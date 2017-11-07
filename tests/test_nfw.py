@@ -321,7 +321,6 @@ def test_ordering():
     numpy.testing.assert_raises(AssertionError,
         numpy.testing.assert_equal, base_result[0], base_result[2])
     comp_m = nfw_1.g_theory(radbins, [m,m], c, z, zs)
-    print comp_m.shape, base_result.shape, "shape"
     numpy.testing.assert_equal(comp_m[:,0], comp_m[:,1])
     numpy.testing.assert_equal(base_result, comp_m[:,0])
     numpy.testing.assert_equal(comp_m[0,0], comp_m[0,1])
@@ -350,6 +349,48 @@ def test_ordering():
         numpy.testing.assert_equal, comp_z[1,0], comp_z[2,0])
 
 
+    # Test some trickery with source redshift stuff
+    sub_base_result = nfw_1.g_theory(radbins, m, c, z, zs[0])
+    base_result = nfw_1.g_theory(radbins, m, c, z, zs)
+    numpy.testing.assert_equal(base_result[0], sub_base_result)
+    numpy.testing.assert_equal(base_result[0], base_result[1])
+    comp_zspdf = nfw_1.g_theory(radbins, m, c, z, zs, [0.1, 0.4, 0.5])
+    numpy.testing.assert_almost_equal(comp_zspdf, 0.5*(base_result[0]+base_result[2]))
+    comp_zspdf = nfw_1.g_theory(radbins, m, c, z, zs, [0.5, 0.5, 1])
+    numpy.testing.assert_equal(comp_zspdf, (base_result[0]+base_result[2]))
+    comp_zspdf = nfw_1.g_theory(radbins, m, c, z, zs[0], [0.5, 1.5])
+    numpy.testing.assert_equal(comp_zspdf, 2*sub_base_result)
+    comp_zspdf = nfw_1.g_theory(radbins, m, c, z, zs, 1)
+    numpy.testing.assert_equal(comp_zspdf, 2*base_result[0]+base_result[2])
+    
+    m = [m,m]
+    sub_base_result = nfw_1.g_theory(radbins, m, c, z, zs[0])
+    base_result = nfw_1.g_theory(radbins, m, c, z, zs)
+    numpy.testing.assert_equal(base_result[0], sub_base_result)
+    numpy.testing.assert_equal(base_result[0], base_result[1])
+    comp_zspdf = nfw_1.g_theory(radbins, m, c, z, zs, [0.1, 0.4, 0.5])
+    numpy.testing.assert_almost_equal(comp_zspdf, 0.5*(base_result[0]+base_result[2]))
+    comp_zspdf = nfw_1.g_theory(radbins, m, c, z, zs, [0.5, 0.5, 1])
+    numpy.testing.assert_almost_equal(comp_zspdf, (base_result[0]+base_result[2]))
+    comp_zspdf = nfw_1.g_theory(radbins, m, c, z, zs[0], [0.5, 1.5])
+    numpy.testing.assert_almost_equal(comp_zspdf, 2*sub_base_result)
+    comp_zspdf = nfw_1.g_theory(radbins, m, c, z, zs, 1)
+    numpy.testing.assert_almost_equal(comp_zspdf, 2*base_result[0]+base_result[2])
+    
+    m = m[0]
+    radbins = radbins[0]
+    sub_base_result = nfw_1.g_theory(radbins, m, c, z, zs[0])
+    base_result = nfw_1.g_theory(radbins, m, c, z, zs)
+    numpy.testing.assert_equal(base_result[0], sub_base_result)
+    numpy.testing.assert_equal(base_result[0], base_result[1])
+    comp_zspdf = nfw_1.g_theory(radbins, m, c, z, zs, [0.1, 0.4, 0.5])
+    numpy.testing.assert_equal(comp_zspdf, 0.5*(base_result[0]+base_result[2]))
+    comp_zspdf = nfw_1.g_theory(radbins, m, c, z, zs, [0.5, 0.5, 1])
+    numpy.testing.assert_equal(comp_zspdf, (base_result[0]+base_result[2]))
+    comp_zspdf = nfw_1.g_theory(radbins, m, c, z, zs[0], [0.5, 1.5])
+    numpy.testing.assert_equal(comp_zspdf, 2*sub_base_result)
+    comp_zspdf = nfw_1.g_theory(radbins, m, c, z, zs, 1)
+    numpy.testing.assert_equal(comp_zspdf, 2*base_result[0]+base_result[2])
     
 def test_setup_table():
     """ Generate a small interpolation table so we can test its outputs. """

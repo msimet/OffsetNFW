@@ -139,17 +139,30 @@ def reshape_multisource(func):
         z_indx = call_sig.args.index('z_source')-1
         zs_indx = call_sig.args.index('z_source_pdf')-1
         zs = all_args[zs_indx]
+        if zs is not None and hasattr(zs, '__iter__'):
+            zs = numpy.asarray(zs)
         all_args = list(all_args)
         all_args[zs_indx] = None
         
-        nargs = len(getargspec(func).args)
+        nargs = len(call_sig.args)
         new_args = _form_iterables_multisource(nargs, z_indx, *all_args)
         # all kwargs should have been consumed above
         result = func(self, *new_args)
 
         if zs is not None:
+            ndim = len(result.shape)
             if hasattr(zs, '__iter__'):
-                return numpy.sum(zs[:, numpy.newaxis, numpy.newaxis]*result, axis=-1)
+                if hasattr(all_args[z_indx], '__iter__'):
+                    if ndim>=3:
+                        return numpy.sum(zs[:, numpy.newaxis, numpy.newaxis]*result, axis=0)
+                    elif ndim==2:
+                        return numpy.sum(zs[:, numpy.newaxis]*result, axis=0)
+                    else:
+                        return numpy.sum(zs*result)
+                else:
+                    return numpy.sum(zs)*result
+            elif hasattr(all_args[z_indx], '__iter__'):
+                return zs*numpy.sum(result, axis=0)
             else:
                 return zs*result
         else:
