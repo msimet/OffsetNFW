@@ -321,6 +321,7 @@ def test_ordering():
     numpy.testing.assert_raises(AssertionError,
         numpy.testing.assert_equal, base_result[0], base_result[2])
     comp_m = nfw_1.g_theory(radbins, [m,m], c, z, zs)
+    print comp_m.shape, base_result.shape, "shape"
     numpy.testing.assert_equal(comp_m[:,0], comp_m[:,1])
     numpy.testing.assert_equal(base_result, comp_m[:,0])
     numpy.testing.assert_equal(comp_m[0,0], comp_m[0,1])
@@ -524,23 +525,254 @@ def test_probability_signal_tables():
             numpy.testing.assert_approx_equal(nfw_halo._exponential_sigma_table((numpy.log(mean_x), numpy.log(nfw_halo.table_x[j]))), mean_ds)
             mean_ds = 0.5*(nfw_halo._exponential_deltasigma[i,j]+nfw_halo._exponential_deltasigma[i+1,j])
             numpy.testing.assert_approx_equal(nfw_halo._exponential_deltasigma_table((numpy.log(mean_x), numpy.log(nfw_halo.table_x[j]))), mean_ds)
+
+def check_attributes(obj, has_list, obj_str="Object"):
+    for attr in has_list:
+        try:
+            assert hasattr(obj, attr)
+        except:
+            raise AssertionError(obj_str+" does not have attribute %s"%attr)
+            
+
+def test_generation():
+    # We could also test for things it *shouldn't* have but unless this is slow I don't care
+    # about it all that much
+    cosmology_obj = fake_cosmo()
+    nfw_halo = offset_nfw.NFWModel(cosmology_obj, precision=1)
+    nfw_halo.generate(sigma=False, deltasigma=False, rayleigh=False, exponential=False, save=False)
+    has_list = ['table_x']
+    check_attributes(nfw_halo, has_list, "NFWHalo object")
+        
+    nfw_halo = offset_nfw.NFWModel(cosmology_obj, precision=1)
+    nfw_halo.generate(sigma=True, deltasigma=False, rayleigh=False, exponential=False, save=False)
+    has_list = ['table_x', '_sigma_table', '_miscentered_sigma', '_miscentered_sigma_table']
+    check_attributes(nfw_halo, has_list, "NFWHalo object")
     
+    nfw_halo = offset_nfw.NFWModel(cosmology_obj, precision=1)
+    nfw_halo.generate(sigma=False, deltasigma=True, rayleigh=False, exponential=False, save=False)
+    has_list = ['table_x', '_sigma_table', '_miscentered_sigma', 
+                '_deltasigma', '_deltasigma_table', '_miscentered_deltasigma',
+                '_miscentered_deltasigma_table']
+    check_attributes(nfw_halo, has_list, "NFWHalo object")
+
+    nfw_halo = offset_nfw.NFWModel(cosmology_obj, precision=1)
+    nfw_halo.generate(sigma=True, deltasigma=True, rayleigh=False, exponential=False, save=False)
+    has_list = ['table_x', '_sigma_table', '_miscentered_sigma', '_miscentered_sigma_table',
+                '_deltasigma', '_deltasigma_table', '_miscentered_deltasigma',
+                '_miscentered_deltasigma_table']
+    check_attributes(nfw_halo, has_list, "NFWHalo object")
+
+    nfw_halo = offset_nfw.NFWModel(cosmology_obj, precision=1)
+    nfw_halo.generate(sigma=False, deltasigma=False, rayleigh=True, exponential=False, save=False)
+    has_list = ['table_x', '_rayleigh_p']
+    check_attributes(nfw_halo, has_list, "NFWHalo object")
+
+
+    nfw_halo = offset_nfw.NFWModel(cosmology_obj, precision=1)
+    nfw_halo.generate(sigma=False, deltasigma=False, rayleigh=False, exponential=True, save=False)
+    has_list = ['table_x', '_exponential_p']
+    check_attributes(nfw_halo, has_list, "NFWHalo object")
+
+    nfw_halo = offset_nfw.NFWModel(cosmology_obj, precision=1)
+    nfw_halo.generate(sigma=True, deltasigma=False, rayleigh=False, exponential=True, save=False)
+    has_list = ['table_x', '_exponential_p', '_sigma_table', '_miscentered_sigma', '_miscentered_sigma_table',  '_exponential_sigma', '_exponential_sigma_table']
+
+    check_attributes(nfw_halo, has_list, "NFWHalo object")
+
+    nfw_halo = offset_nfw.NFWModel(cosmology_obj, precision=1)
+    nfw_halo.generate(sigma=False, deltasigma=True, rayleigh=False, exponential=True, save=False)
+    has_list = ['table_x', '_exponential_p', '_sigma_table', '_miscentered_sigma', 
+                '_exponential_sigma', 
+                '_deltasigma', '_deltasigma_table', '_miscentered_deltasigma', 
+                '_miscentered_deltasigma_table', '_exponential_deltasigma', 
+                '_exponential_deltasigma_table']
+    check_attributes(nfw_halo, has_list, "NFWHalo object")
+
+    nfw_halo = offset_nfw.NFWModel(cosmology_obj, precision=1)
+    nfw_halo.generate(sigma=True, deltasigma=False, rayleigh=True, exponential=False, save=False)
+    has_list = ['table_x', '_rayleigh_p', '_sigma_table', '_miscentered_sigma', '_miscentered_sigma_table',  '_rayleigh_sigma', '_rayleigh_sigma_table']
+
+    check_attributes(nfw_halo, has_list, "NFWHalo object")
+
+    nfw_halo = offset_nfw.NFWModel(cosmology_obj, precision=1)
+    nfw_halo.generate(sigma=False, deltasigma=True, rayleigh=True, exponential=False, save=False)
+    has_list = ['table_x', '_rayleigh_p', '_sigma_table', '_miscentered_sigma', 
+                '_rayleigh_sigma', 
+                '_deltasigma', '_deltasigma_table', '_miscentered_deltasigma', 
+                '_miscentered_deltasigma_table', '_rayleigh_deltasigma', 
+                '_rayleigh_deltasigma_table']
+    check_attributes(nfw_halo, has_list, "NFWHalo object")
+
+    nfw_halo = offset_nfw.NFWModel(cosmology_obj, precision=1)
+    nfw_halo.generate(sigma=True, deltasigma=True, rayleigh=True, exponential=True, save=False)
+    has_list = ['table_x','_sigma_table', '_miscentered_sigma', '_miscentered_sigma_table',
+                    '_deltasigma', '_deltasigma_table', '_miscentered_deltasigma', 
+                    '_miscentered_deltasigma_table', '_rayleigh_p', '_rayleigh_sigma', 
+                    '_rayleigh_sigma_table', '_rayleigh_deltasigma', '_rayleigh_deltasigma_table', 
+                    '_exponential_p', '_exponential_sigma', '_exponential_sigma_table', 
+                    '_exponential_deltasigma', '_exponential_deltasigma_table']
+    check_attributes(nfw_halo, has_list, "NFWHalo object")
+
+def test_table_saving():
+    cosmology_obj = fake_cosmo()
+    nfw_halo = offset_nfw.NFWModel(cosmology_obj, precision=1)
+    existing_tables = glob.glob(nfw_halo.table_file_root+"*.npy")
+    for table in existing_tables:
+        os.remove(table)
+    nfw_halo.generate()
+    existing_tables = glob.glob(nfw_halo.table_file_root+"*.npy")
+    try:
+        assert len(existing_tables)
+    except AssertionError:
+        raise AssertionError("No files generated from nfw_halo.generate()!")
+    nfw_halo_2 = offset_nfw.NFWModel(cosmology_obj, precision=1)
+    has_list = ['table_x','_sigma_table', '_miscentered_sigma', '_miscentered_sigma_table',
+                    '_deltasigma', '_deltasigma_table', '_miscentered_deltasigma', 
+                    '_miscentered_deltasigma_table', '_rayleigh_sigma', 
+                    '_rayleigh_sigma_table', '_rayleigh_deltasigma', '_rayleigh_deltasigma_table', 
+                    '_exponential_sigma', '_exponential_sigma_table', 
+                    '_exponential_deltasigma', '_exponential_deltasigma_table']
+    check_attributes(nfw_halo_2, has_list, "NFWHalo object with loaded tables")
+    for item in has_list:
+        if item[-5:]!="table": #interpolation objects won't match
+            numpy.testing.assert_equal(nfw_halo.__dict__[item], nfw_halo_2.__dict__[item])
+    random_points = numpy.log(nfw_halo.x_min+(nfw_halo.x_max-nfw_halo.x_min)*numpy.random.random(10))
+    random_points2 = numpy.log(nfw_halo.x_min+(nfw_halo.x_max-nfw_halo.x_min)*numpy.random.random(10))
+    numpy.testing.assert_equal(nfw_halo._sigma_table(random_points),
+                               nfw_halo_2._sigma_table(random_points)) 
+    numpy.testing.assert_equal(nfw_halo._miscentered_sigma_table((random_points, random_points2)), 
+                               nfw_halo_2._miscentered_sigma_table((random_points, random_points2)))
+    numpy.testing.assert_equal(nfw_halo._deltasigma_table(random_points), 
+                               nfw_halo_2._deltasigma_table(random_points))
+    numpy.testing.assert_equal(nfw_halo._miscentered_deltasigma_table((random_points, random_points2)), 
+                               nfw_halo_2._miscentered_deltasigma_table((random_points, random_points2)))
+    numpy.testing.assert_equal(nfw_halo._rayleigh_sigma_table((random_points, random_points2)), 
+                               nfw_halo_2._rayleigh_sigma_table((random_points, random_points2)))
+    numpy.testing.assert_equal(nfw_halo._rayleigh_deltasigma_table((random_points, random_points2)), 
+                               nfw_halo_2._rayleigh_deltasigma_table((random_points, random_points2)))
+    numpy.testing.assert_equal(nfw_halo._exponential_sigma_table((random_points, random_points2)),
+                               nfw_halo_2._exponential_sigma_table((random_points, random_points2)))
+    numpy.testing.assert_equal(nfw_halo._exponential_deltasigma_table((random_points, random_points2)), 
+                               nfw_halo_2._exponential_deltasigma_table((random_points, random_points2)))
+    
+def test_interpolated_signals():
+    print "Note: For time-of-computation reasons, we cannot do high-precision validation of",
+    print "miscentered lensing signals. More detailed validation scripts can be found in the",
+    print "OffsetNFW/validation directory."
+    cosmology_obj = astropy.cosmology.FlatLambdaCDM(H0=100, Om0=0.3)
+    nfw_halo = offset_nfw.NFWModel(cosmology_obj, precision=0.25)
+    existing_tables = glob.glob(nfw_halo.table_file_root+"*.npy")
+    if not len(existing_tables):
+        nfw_halo.generate()
+    n = len(nfw_halo.table_x)
+    # These seem to work best for the middle ~50% of the radial range at low precision
+    x_min = nfw_halo.table_x[n/4]
+    x_max = nfw_halo.table_x[-n/4]
+    r = numpy.exp(numpy.log(x_min) + numpy.log(x_max/x_min)*numpy.random.random(100))
+    r = r*nfw_halo.scale_radius(*m_c_z_test_list[0])
+    r_mis = numpy.exp(numpy.log(x_min) + numpy.log(x_max/x_min)*numpy.random.random(100))
+    r_mix = r_mis*nfw_halo.scale_radius(*m_c_z_test_list[0])
+    for m, c, z in m_c_z_test_list+m_c_z_multi_test_list:
+        s = nfw_halo.sigma_theory(r, m, c, z)
+        # Decimal=2 because this is a low-precision table!!
+        r_mis = x_min*nfw_halo.scale_radius(m, c, z)/4
+        numpy.testing.assert_almost_equal(s/nfw_halo.sigma(r, m, c, z), 1, decimal=2)
+        numpy.testing.assert_almost_equal(s/nfw_halo.sigma(r, m, c, z, r_mis), 1, decimal=1)
+        numpy.testing.assert_almost_equal(s/nfw_halo.sigma_Rayleigh(r, m, c, z), 1, decimal=2)
+        numpy.testing.assert_almost_equal(s/nfw_halo.sigma_Rayleigh(r, m, c, z, r_mis), 1, decimal=1)
+        numpy.testing.assert_almost_equal(s/nfw_halo.sigma_exponential(r, m, c, z), 1, decimal=2)
+        numpy.testing.assert_almost_equal(s/nfw_halo.sigma_exponential(r, m, c, z, r_mis), 1, decimal=1)
+
+        ds = nfw_halo.deltasigma_theory(r, m, c, z)
+        # This is a low-precision table!!
+        numpy.testing.assert_almost_equal(ds/nfw_halo.deltasigma(r, m, c, z), 1, decimal=1)
+        numpy.testing.assert_almost_equal(ds/nfw_halo.deltasigma(r, m, c, z, r_mis), 1, decimal=0)
+        numpy.testing.assert_almost_equal(ds/nfw_halo.deltasigma_Rayleigh(r, m, c, z), 1, decimal=1)
+        numpy.testing.assert_almost_equal(ds/nfw_halo.deltasigma_Rayleigh(r, m, c, z, r_mis), 1, decimal=0)
+        numpy.testing.assert_almost_equal(ds/nfw_halo.deltasigma_exponential(r, m, c, z), 1, decimal=1)
+        mask = numpy.where(ds/nfw_halo.deltasigma_exponential(r, m, c, z, r_mis)>1.5)[0]
+        numpy.testing.assert_almost_equal(nfw_halo.deltasigma_exponential(r, m, c, z, r_mis)/ds, 1, decimal=0)
+        
+        z_source = 4.95
+        g = (nfw_halo.gamma_theory(r, m, c, z, z_source)
+                                  /(1-nfw_halo.kappa_theory(r, m, c, z, z_source)))
+        numpy.testing.assert_almost_equal(nfw_halo.g(r, m, c, z, z_source)/g, 1, decimal=1)
+        numpy.testing.assert_almost_equal(nfw_halo.g(r, m, c, z, z_source, r_mis)/g, 1, decimal=0)
+        numpy.testing.assert_almost_equal(nfw_halo.g_Rayleigh(r, m, c, z, z_source)/g, 1, decimal=0)
+        numpy.testing.assert_almost_equal(nfw_halo.g_Rayleigh(r, m, c, z, z_source, r_mis)/g, 1, decimal=0)
+        numpy.testing.assert_almost_equal(nfw_halo.g_exponential(r, m, c, z, z_source)/g, 1, decimal=1)
+        numpy.testing.assert_almost_equal(nfw_halo.g_exponential(r, m, c, z, z_source, r_mis)/g, 1, decimal=0)
+
+        rmin = numpy.min(r)
+        rmin /= 2
+        for r0 in r[::4]:
+            ups = nfw_halo.Upsilon_theory(r, m, c, z, r0-rmin)
+            # This is a low-precision table!!
+            numpy.testing.assert_almost_equal(ups/nfw_halo.Upsilon(r, m, c, z, r0-rmin), 1, decimal=0)
+            numpy.testing.assert_almost_equal(ups/nfw_halo.Upsilon(r, m, c, z, r0-rmin, r_mis), 1, decimal=0)
+            numpy.testing.assert_almost_equal(ups/nfw_halo.Upsilon_Rayleigh(r, m, c, z, r0-rmin), 1, decimal=0)
+            numpy.testing.assert_almost_equal(ups/nfw_halo.Upsilon_Rayleigh(r, m, c, z, r0-rmin, r_mis), 1, decimal=0)
+            numpy.testing.assert_almost_equal(ups/nfw_halo.Upsilon_exponential(r, m, c, z, r0-rmin), 1, decimal=0)
+            numpy.testing.assert_almost_equal(ups/nfw_halo.Upsilon_exponential(r, m, c, z, r0-rmin, r_mis), 1, decimal=0)
+    
+def test_z_ratios_interp():
+    """ Test that the theoretical shear changes properly with redshift"""
+    nfw_halo = offset_nfw.NFWModel(cosmo, delta=200, rho='rho_c', precision=0.25)
+    existing_tables = glob.glob(nfw_halo.table_file_root+"*.npy")
+    if not len(existing_tables):
+        nfw_halo.generate()
+    base = nfw_halo.gamma(1., 1.E14, 4, 0.1, 0.15)
+    new_z = numpy.linspace(0.15, 1.1, num=20)
+    new_gamma = nfw_halo.gamma(1, 1.E14, 4, 0.1, z_source=new_z)
+    new_gamma /= base
+    numpy.testing.assert_allclose(new_gamma, cosmo.angular_diameter_distance_z1z2(0.1, new_z)/cosmo.angular_diameter_distance_z1z2(0.1, 0.15)*cosmo.angular_diameter_distance(0.15)/cosmo.angular_diameter_distance(new_z))
+
+    base = nfw_halo.kappa(1., 1.E14, 4, 0.1, 0.15)
+    new_sigma = nfw_halo.kappa(1, 1.E14, 4, 0.1, new_z)
+    new_sigma /= base
+    numpy.testing.assert_allclose(new_sigma, cosmo.angular_diameter_distance_z1z2(0.1, new_z)/cosmo.angular_diameter_distance_z1z2(0.1, 0.15)*cosmo.angular_diameter_distance(0.15)/cosmo.angular_diameter_distance(new_z))
+
 if __name__=='__main__':
     test_object_creation()
+    print "done with object creation"
     test_scale_radii()
+    print "done with scale radii"
     test_against_colossus()
+    print "done with colossus"
     test_z_ratios_theory()
+    print "done with z ratios theory"
     test_against_galsim_theory()
+    print "done with galsim theory"
     test_against_clusterlensing_theory()
+    print "done with clusterlensing theory"
     test_sigma_to_deltasigma_theory()
+    print "done with sigma_to_deltasigma_theory"
     test_g()
+    print "done with g"
     test_Upsilon()
+    print "done with Upsilon"
     test_ordering()
+    print "done with ordering"
     test_setup_table()
+    print "done with setup table"
     test_build_sigma()
+    print "done with build sigma"
     test_build_miscentered_sigma()
+    print "done with build miscentered sigma"
     test_build_deltasigma()
+    print "done with build deltasigma"
     test_build_miscentered_deltasigma()
+    print "done with build miscentered deltasigma"
     test_probabilities()
+    print "done with probabilities"
     test_probability_signal_tables()
+    print "done with probability signal tables"
+    test_generation()
+    print "done with generation"
+    test_table_saving()
+    print "done with table saving"
+    test_interpolated_signals()
+    print "done with interpolated signals"
+    test_z_ratios_interp()
+    print "done with z ratios interp"
 

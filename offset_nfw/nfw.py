@@ -738,7 +738,28 @@ class NFWModel(object):
             (which of course may be only one item!), then this returns an array of shape
             ``(n1, n2, ..., nn, len(r))``.
         """
-        raise NotImplementedError("NFWModel currently can't do delta sigmas!")
+        rs = self.scale_radius(M, c, z)
+        if not isinstance(r, u.Quantity):
+            r = r*u.Mpc
+        x = numpy.atleast_1d((r/rs).decompose().value)
+        if not isinstance(r_mis, u.Quantity):
+            r_mis = r_mis*u.Mpc
+        x_mis = numpy.atleast_1d((r_mis/rs).decompose().value)
+        
+        norm = self.nfw_norm(M, c, z)
+        zeromask = x_mis==0
+        if numpy.all(zeromask):
+            return_vals = self._deltasigma_table(numpy.log(x))
+        else:
+            clipx = numpy.clip(x_mis, self.table_x[0], None)
+            return_vals = self._miscentered_deltasigma_table((numpy.log(clipx), numpy.log(x)))
+            if numpy.any(zeromask):
+                return_vals[zeromask] = self._deltasigma_table(numpy.log(x[zeromask]))
+            if numpy.any(P_cen>0):
+                return_vals *= (1-P_cen)
+                return_vals += P_cen*self._deltasigma_table(numpy.log(x))
+        return_vals = norm*return_vals
+        return return_vals
 
     @reshape
     def sigma(self, r, M, c, z, r_mis=0, P_cen=0):
@@ -778,7 +799,28 @@ class NFWModel(object):
             (which of course may be only one item!), then this returns an array of shape
             ``(n1, n2, ..., nn, len(r))``.
         """
-        raise NotImplementedError("NFWModel currently can't do sigmas!")
+        rs = self.scale_radius(M, c, z)
+        if not isinstance(r, u.Quantity):
+            r = r*u.Mpc
+        x = numpy.atleast_1d((r/rs).decompose().value)
+        if not isinstance(r_mis, u.Quantity):
+            r_mis = r_mis*u.Mpc
+        x_mis = numpy.atleast_1d((r_mis/rs).decompose().value)
+        
+        norm = self.nfw_norm(M, c, z)
+        zeromask = x_mis==0
+        if numpy.all(zeromask):
+            return_vals = self._sigma_table(numpy.log(x))
+        else:
+            clipx = numpy.clip(x_mis, self.table_x[0], None)
+            return_vals = self._miscentered_sigma_table((numpy.log(clipx), numpy.log(x)))
+            if numpy.any(zeromask):
+                return_vals[zeromask] = self._sigma_table(numpy.log(x[zeromask]))
+            if numpy.any(P_cen>0):
+                return_vals *= (1-P_cen)
+                return_vals += P_cen*self._sigma_table(numpy.log(x))
+        return_vals = norm*return_vals
+        return return_vals
 
     @reshape
     def Upsilon(self, r, M, c, z, r0, r_mis=0, P_cen=0):
@@ -820,7 +862,8 @@ class NFWModel(object):
             (which of course may be only one item!), then this returns an array of shape
             ``(n1, n2, ..., nn, len(r))``.
         """
-        raise NotImplementedError("NFWModel currently can't do upsilon statistics!")
+        return (self.deltasigma(r, M, c, z, r_mis=r_mis, P_cen=P_cen, skip_reformat=True) 
+                    - (r0/r)**2*self.deltasigma(r0, M, c, z, r_mis=r_mis, P_cen=P_cen, skip_reformat=True))
 
     @reshape_multisource
     def gamma(self, r, M, c, z_lens, z_source, r_mis=0, P_cen=0, z_source_pdf=None):
@@ -861,7 +904,9 @@ class NFWModel(object):
             (which of course may be only one item!), then this returns an array of shape
             ``(n1, n2, ..., nn, len(r))``.
         """
-        raise NotImplementedError("NFWModel currently can't do tangential shear!")
+        deltasigma = self.deltasigma(r, M, c, z_lens, r_mis=r_mis, P_cen=P_cen, skip_reformat=True)
+        sci = self.sigma_crit_inverse(z_lens, z_source)
+        return sci*deltasigma
 
     @reshape_multisource
     def kappa(self, r, M, c, z_lens, z_source, r_mis=0, P_cen=0, z_source_pdf=None):
@@ -901,7 +946,9 @@ class NFWModel(object):
             (which of course may be only one item!), then this returns an array of shape
             ``(n1, n2, ..., nn, len(r))``.
         """
-        raise NotImplementedError("NFWModel currently can't do convergence!")
+        sigma = self.sigma(r, M, c, z_lens, r_mis=r_mis, P_cen=P_cen, skip_reformat=True)
+        sci = self.sigma_crit_inverse(z_lens, z_source)
+        return sci*sigma
 
     @reshape_multisource       
     def g(self, r, M, c, z_lens, z_source, r_mis=0, P_cen=0, z_source_pdf=None):
@@ -941,7 +988,8 @@ class NFWModel(object):
             (which of course may be only one item!), then this returns an array of shape
             ``(n1, n2, ..., nn, len(r))``.
         """
-        raise NotImplementedError("NFWModel currently can't do reduced shear!")
+        return (self.gamma(r, M, c, z_lens, z_source, r_mis=r_mis, P_cen=P_cen, skip_reformat=True)
+                 /(1.-self.kappa(r, M, c, z_lens, z_source, r_mis=r_mis, P_cen=P_cen, skip_reformat=True)))
 
     @reshape
     def deltasigma_Rayleigh(self, r, M, c, z, r_mis=0, P_cen=0):
@@ -984,8 +1032,28 @@ class NFWModel(object):
             (which of course may be only one item!), then this returns an array of shape
             ``(n1, n2, ..., nn, len(r))``.
         """
-        raise NotImplementedError("NFWModel currently can't do delta sigmas with Rayleigh "+
-                "distributions!")
+        rs = self.scale_radius(M, c, z)
+        if not isinstance(r, u.Quantity):
+            r = r*u.Mpc
+        x = numpy.atleast_1d((r/rs).decompose().value)
+        if not isinstance(r_mis, u.Quantity):
+            r_mis = r_mis*u.Mpc
+        x_mis = numpy.atleast_1d((r_mis/rs).decompose().value)
+        
+        norm = self.nfw_norm(M, c, z)
+        zeromask = x_mis==0
+        if numpy.all(zeromask):
+            return_vals = self._deltasigma_table(numpy.log(x))
+        else:
+            clipx = numpy.clip(x_mis, self.table_x[0], None)
+            return_vals = self._rayleigh_deltasigma_table((numpy.log(clipx), numpy.log(x)))
+            if numpy.any(zeromask):
+                return_vals[zeromask] = self._deltasigma_table(numpy.log(x[zeromask]))
+            if numpy.any(P_cen>0):
+                return_vals *= (1-P_cen)
+                return_vals += P_cen*self._deltasigma_table(numpy.log(x))
+        return_vals = norm*return_vals
+        return return_vals
 
     @reshape
     def sigma_Rayleigh(self, r, M, c, z, r_mis=0, P_cen=0):
@@ -1028,7 +1096,28 @@ class NFWModel(object):
             (which of course may be only one item!), then this returns an array of shape
             ``(n1, n2, ..., nn, len(r))``.
         """
-        raise NotImplementedError("NFWModel currently can't do sigmas with Rayleigh distributions!")
+        rs = self.scale_radius(M, c, z)
+        if not isinstance(r, u.Quantity):
+            r = r*u.Mpc
+        x = numpy.atleast_1d((r/rs).decompose().value)
+        if not isinstance(r_mis, u.Quantity):
+            r_mis = r_mis*u.Mpc
+        x_mis = numpy.atleast_1d((r_mis/rs).decompose().value)
+        
+        norm = self.nfw_norm(M, c, z)
+        zeromask = x_mis==0
+        if numpy.all(zeromask):
+            return_vals = self._sigma_table(numpy.log(x))
+        else:
+            clipx = numpy.clip(x_mis, self.table_x[0], None)
+            return_vals = self._rayleigh_sigma_table((numpy.log(clipx), numpy.log(x)))
+            if numpy.any(zeromask):
+                return_vals[zeromask] = self._sigma_table(numpy.log(x[zeromask]))
+            if numpy.any(P_cen>0):
+                return_vals *= (1-P_cen)
+                return_vals += P_cen*self._sigma_table(numpy.log(x))
+        return_vals = norm*return_vals
+        return return_vals
 
     @reshape
     def Upsilon_Rayleigh(self, r, M, c, z, r0, r_mis=0, P_cen=0):
@@ -1073,8 +1162,8 @@ class NFWModel(object):
             (which of course may be only one item!), then this returns an array of shape
             ``(n1, n2, ..., nn, len(r))``.
         """
-        raise NotImplementedError("NFWModel currently can't do upsilon statistics with Rayleigh "+
-                "distributions!")
+        return (self.deltasigma_Rayleigh(r, M, c, z, r_mis=r_mis, P_cen=P_cen, skip_reformat=True) 
+                    - (r0/r)**2*self.deltasigma_Rayleigh(r0, M, c, z, r_mis=r_mis, P_cen=P_cen, skip_reformat=True))
 
     @reshape_multisource
     def gamma_Rayleigh(self, r, M, c, z_lens, z_source, r_mis=0, P_cen=0, z_source_pdf=None):
@@ -1117,8 +1206,9 @@ class NFWModel(object):
             (which of course may be only one item!), then this returns an array of shape
             ``(n1, n2, ..., nn, len(r))``.
         """
-        raise NotImplementedError("NFWModel currently can't do tangential shear with Rayleigh "+
-                "distributions!")
+        deltasigma = self.deltasigma_Rayleigh(r, M, c, z_lens, r_mis=r_mis, P_cen=P_cen, skip_reformat=True)
+        sci = self.sigma_crit_inverse(z_lens, z_source)
+        return sci*deltasigma
 
     @reshape_multisource    
     def kappa_Rayleigh(self, r, M, c, z_lens, z_source, r_mis=0, P_cen=0, z_source_pdf=None):
@@ -1161,8 +1251,9 @@ class NFWModel(object):
             (which of course may be only one item!), then this returns an array of shape
             ``(n1, n2, ..., nn, len(r))``.
         """
-        raise NotImplementedError("NFWModel currently can't do convergence with Rayleigh "+
-                "distributions!")
+        sigma = self.sigma_Rayleigh(r, M, c, z_lens, r_mis=r_mis, P_cen=P_cen, skip_reformat=True)
+        sci = self.sigma_crit_inverse(z_lens, z_source)
+        return sci*sigma
     
     @reshape_multisource
     def g_Rayleigh(self, r, M, c, z_lens, z_source, r_mis=0, P_cen=0, z_source_pdf=None):
@@ -1205,5 +1296,314 @@ class NFWModel(object):
             (which of course may be only one item!), then this returns an array of shape
             ``(n1, n2, ..., nn, len(r))``.
         """
-        raise NotImplementedError("NFWModel currently can't do reduced shear with Rayleigh "+
-                "distributions!")
+        return (self.gamma_Rayleigh(r, M, c, z_lens, z_source, r_mis=r_mis, P_cen=P_cen, skip_reformat=True)
+                 /(1.-self.kappa_Rayleigh(r, M, c, z_lens, z_source, r_mis=r_mis, P_cen=P_cen, skip_reformat=True)))
+
+
+    @reshape
+    def deltasigma_exponential(self, r, M, c, z, r_mis=0, P_cen=0):
+        """Return an NFW delta sigma from an internal interpolation table, assuming that the
+        miscentering takes the form of an exponential distribution plus a delta function:
+        fraction `0<P_cen<1` of the halos have correct centers, while the ones which are miscentered
+        have an exponential distribution with scale length r_mis.
+        
+        Parameters
+        ----------
+        r : float or iterable
+            The radius or radii (in length, not angular, units) at which to evaluate the function.
+            Whatever definition (comoving/not, etc) you used for your cosmology object should be
+            replicated here.  This can be an object with astropy units of length; if not it is
+            assumed to be in Mpc/h.
+        M : float or iterable
+            The mass of the halo at the overdensity definition given at class initialization. If
+            this is an iterable, all other non-r parameters must be either iterables with the same
+            length or floats. This can be an object with astropy units of mass; if not it is assumed
+            to be in h Msun.
+        c : float or iterable
+            The concentration of the halo at the overdensity definition given at class 
+            initialization.  If this is an iterable, all other non-r parameters must be either
+            iterables with the same length or floats.
+        r_mis : float or iterable
+            The distance (in length units) between the reported center of the halo and the actual
+            assumed to be in Mpc/h.
+            center of the halo.  Whatever definition (comoving/not, etc) you used for your cosmology
+            object should be replicated here.  This can be an object with astropy units of length;
+            if not it is assumed to be in Mpc/h.  If this is an iterable, all other non-r parameters
+            must be either iterables with the same length or floats.
+        
+        Returns
+        -------
+        float or numpy.ndarray
+            Returns the value of delta sigma at the requested parameters. If every parameter was a
+            float, this is a float. If only r OR some of the non-r parameters were iterable, this is
+            a 1D array with the same length as the iterable parameters.  If both r and another
+            parameter were iterable, with the non-r parameter having shape ``(n1, n2, ..., nn)``
+            (which of course may be only one item!), then this returns an array of shape
+            ``(n1, n2, ..., nn, len(r))``.
+        """
+        rs = self.scale_radius(M, c, z)
+        if not isinstance(r, u.Quantity):
+            r = r*u.Mpc
+        x = numpy.atleast_1d((r/rs).decompose().value)
+        if not isinstance(r_mis, u.Quantity):
+            r_mis = r_mis*u.Mpc
+        x_mis = numpy.atleast_1d((r_mis/rs).decompose().value)
+        
+        norm = self.nfw_norm(M, c, z)
+        zeromask = x_mis==0
+        if numpy.all(zeromask):
+            return_vals = self._deltasigma_table(numpy.log(x))
+        else:
+            clipx = numpy.clip(x_mis, self.table_x[0], None)
+            return_vals = self._exponential_deltasigma_table((numpy.log(clipx), numpy.log(x)))
+            if numpy.any(zeromask):
+                return_vals[zeromask] = self._deltasigma_table(numpy.log(x[zeromask]))
+            if numpy.any(P_cen>0):
+                return_vals *= (1-P_cen)
+                return_vals += P_cen*self._deltasigma_table(numpy.log(x))
+        return_vals = norm*return_vals
+        return return_vals
+
+    @reshape
+    def sigma_exponential(self, r, M, c, z, r_mis=0, P_cen=0):
+        """Return an NFW sigma from an internal interpolation table, assuming that the
+        miscentering takes the form of an exponential distribution plus a delta function:
+        fraction `0<P_cen<1` of the halos have correct centers, while the ones which are miscentered
+        have a exponential distribution with scale length r_mis.
+        
+        Parameters
+        ----------
+        r : float or iterable
+            The radius or radii (in length, not angular, units) at which to evaluate the function.
+            Whatever definition (comoving/not, etc) you used for your cosmology object should be
+            replicated here.  This can be an object with astropy units of length; if not it is
+            assumed to be in Mpc/h.
+        M : float or iterable
+            The mass of the halo at the overdensity definition given at class initialization. If
+            this is an iterable, all other non-r parameters must be either iterables with the same
+            length or floats. This can be an object with astropy units of mass; if not it is assumed
+            to be in h Msun.
+        c : float or iterable
+            The concentration of the halo at the overdensity definition given at class 
+            initialization.  If this is an iterable, all other non-r parameters must be either
+            iterables with the same length or floats.
+        r_mis : float or iterable
+            The distance (in length units) between the reported center of the halo and the actual
+            assumed to be in Mpc/h.
+            center of the halo.  Whatever definition (comoving/not, etc) you used for your cosmology
+            object should be replicated here.  This can be an object with astropy units of length;
+            if not it is assumed to be in Mpc/h.  If this is an iterable, all other non-r parameters
+            must be either iterables with the same length or floats.
+        
+        Returns
+        -------
+        float or numpy.ndarray
+            Returns the value of sigma at the requested parameters. If every parameter was a
+            float, this is a float. If only r OR some of the non-r parameters were iterable, this is
+            a 1D array with the same length as the iterable parameters.  If both r and another
+            parameter were iterable, with the non-r parameter having shape ``(n1, n2, ..., nn)``
+            (which of course may be only one item!), then this returns an array of shape
+            ``(n1, n2, ..., nn, len(r))``.
+        """
+        rs = self.scale_radius(M, c, z)
+        if not isinstance(r, u.Quantity):
+            r = r*u.Mpc
+        x = numpy.atleast_1d((r/rs).decompose().value)
+        if not isinstance(r_mis, u.Quantity):
+            r_mis = r_mis*u.Mpc
+        x_mis = numpy.atleast_1d((r_mis/rs).decompose().value)
+        
+        norm = self.nfw_norm(M, c, z)
+        zeromask = x_mis==0
+        if numpy.all(zeromask):
+            return_vals = self._sigma_table(numpy.log(x))
+        else:
+            clipx = numpy.clip(x_mis, self.table_x[0], None)
+            return_vals = self._exponential_sigma_table((numpy.log(clipx), numpy.log(x)))
+            if numpy.any(zeromask):
+                return_vals[zeromask] = self._sigma_table(numpy.log(x[zeromask]))
+            if numpy.any(P_cen>0):
+                return_vals *= (1-P_cen)
+                return_vals += P_cen*self._sigma_table(numpy.log(x))
+        return_vals = norm*return_vals
+        return return_vals
+
+    @reshape
+    def Upsilon_exponential(self, r, M, c, z, r0, r_mis=0, P_cen=0):
+        """Return an NFW Upsilon statistic from an internal interpolation table, assuming that the
+        miscentering takes the form of an exponential distribution plus a delta function:
+        fraction `0<P_cen<1` of the halos have correct centers, while the ones which are miscentered
+        have a exponential distribution with scale length r_mis.
+        
+        For details of the Upsilon statistic, see the documentation for :func:`Upsilon_theory`.
+        
+        Parameters
+        ----------
+        r : float or iterable
+            The radius or radii (in length, not angular, units) at which to evaluate the function.
+            Whatever definition (comoving/not, etc) you used for your cosmology object should be
+            replicated here.  This can be an object with astropy units of length; if not it is
+            assumed to be in Mpc/h.
+        M : float or iterable
+            The mass of the halo at the overdensity definition given at class initialization. If
+            this is an iterable, all other non-r parameters must be either iterables with the same
+            length or floats. This can be an object with astropy units of mass; if not it is assumed
+            to be in h Msun.
+        c : float or iterable
+            The concentration of the halo at the overdensity definition given at class 
+            initialization.  If this is an iterable, all other non-r parameters must be either
+            iterables with the same length or floats.
+        r_mis : float or iterable
+            The distance (in length units) between the reported center of the halo and the actual
+            assumed to be in Mpc/h.
+            center of the halo.  Whatever definition (comoving/not, etc) you used for your cosmology
+            object should be replicated here.  This can be an object with astropy units of length;
+            if not it is assumed to be in Mpc/h.  If this is an iterable, all other non-r parameters
+            must be either iterables with the same length or floats.
+        
+        Returns
+        -------
+        float or numpy.ndarray
+            Returns the value of Upsilon at the requested parameters. If every parameter was a
+            float, this is a float. If only r OR some of the non-r parameters were iterable, this is
+            a 1D array with the same length as the iterable parameters.  If both r and another
+            parameter were iterable, with the non-r parameter having shape ``(n1, n2, ..., nn)``
+            (which of course may be only one item!), then this returns an array of shape
+            ``(n1, n2, ..., nn, len(r))``.
+        """
+        return (self.deltasigma_exponential(r, M, c, z, r_mis=r_mis, P_cen=P_cen, skip_reformat=True) 
+                    - (r0/r)**2*self.deltasigma_exponential(r0, M, c, z, r_mis=r_mis, P_cen=P_cen, skip_reformat=True))
+
+    @reshape_multisource
+    def gamma_exponential(self, r, M, c, z_lens, z_source, r_mis=0, P_cen=0, z_source_pdf=None):
+        """Return an NFW tangential shear from an internal interpolation table, assuming that the
+        miscentering takes the form of an exponential distribution plus a delta function:
+        fraction `0<P_cen<1` of the halos have correct centers, while the ones which are miscentered
+        have a exponential distribution with scale length r_mis.        
+        Parameters
+        ----------
+        r : float or iterable
+            The radius or radii (in length, not angular, units) at which to evaluate the function.
+            Whatever definition (comoving/not, etc) you used for your cosmology object should be
+            replicated here.  This can be an object with astropy units of length; if not it is
+            assumed to be in Mpc/h.
+        M : float or iterable
+            The mass of the halo at the overdensity definition given at class initialization. If
+            this is an iterable, all other non-r parameters must be either iterables with the same
+            length or floats. This can be an object with astropy units of mass; if not it is assumed
+            to be in h Msun.
+        c : float or iterable
+            The concentration of the halo at the overdensity definition given at class 
+            initialization.  If this is an iterable, all other non-r parameters must be either
+            iterables with the same length or floats.
+        r_mis : float or iterable
+            The distance (in length units) between the reported center of the halo and the actual
+            assumed to be in Mpc/h.
+            center of the halo.  Whatever definition (comoving/not, etc) you used for your cosmology
+            object should be replicated here.  This can be an object with astropy units of length;
+            if not it is assumed to be in Mpc/h.  If this is an iterable, all other non-r parameters
+            must be either iterables with the same length or floats.
+        
+        Returns
+        -------
+        float or numpy.ndarray
+            Returns the value of gamma at the requested parameters. If every parameter was a
+            float, this is a float. If only r OR some of the non-r parameters were iterable, this is
+            a 1D array with the same length as the iterable parameters.  If both r and another
+            parameter were iterable, with the non-r parameter having shape ``(n1, n2, ..., nn)``
+            (which of course may be only one item!), then this returns an array of shape
+            ``(n1, n2, ..., nn, len(r))``.
+        """
+        deltasigma = self.deltasigma_exponential(r, M, c, z_lens, r_mis=r_mis, P_cen=P_cen, skip_reformat=True)
+        sci = self.sigma_crit_inverse(z_lens, z_source)
+        return sci*deltasigma
+
+    @reshape_multisource    
+    def kappa_exponential(self, r, M, c, z_lens, z_source, r_mis=0, P_cen=0, z_source_pdf=None):
+        """Return an NFW convergence from an internal interpolation table, assuming that the
+        miscentering takes the form of an exponential distribution plus a delta function:
+        fraction `0<P_cen<1` of the halos have correct centers, while the ones which are miscentered
+        have a exponential distribution with scale length r_mis.        
+
+        Parameters
+        ----------
+        r : float or iterable
+            The radius or radii (in length, not angular, units) at which to evaluate the function.
+            Whatever definition (comoving/not, etc) you used for your cosmology object should be
+            replicated here.  This can be an object with astropy units of length; if not it is
+            assumed to be in Mpc/h.
+        M : float or iterable
+            The mass of the halo at the overdensity definition given at class initialization. If
+            this is an iterable, all other non-r parameters must be either iterables with the same
+            length or floats. This can be an object with astropy units of mass; if not it is assumed
+            to be in h Msun.
+        c : float or iterable
+            The concentration of the halo at the overdensity definition given at class 
+            initialization.  If this is an iterable, all other non-r parameters must be either
+            iterables with the same length or floats.
+        r_mis : float or iterable
+            The distance (in length units) between the reported center of the halo and the actual
+            assumed to be in Mpc/h.
+            center of the halo.  Whatever definition (comoving/not, etc) you used for your cosmology
+            object should be replicated here.  This can be an object with astropy units of length;
+            if not it is assumed to be in Mpc/h.  If this is an iterable, all other non-r parameters
+            must be either iterables with the same length or floats.
+        
+        Returns
+        -------
+        float or numpy.ndarray
+            Returns the value of kappa at the requested parameters. If every parameter was a
+            float, this is a float. If only r OR some of the non-r parameters were iterable, this is
+            a 1D array with the same length as the iterable parameters.  If both r and another
+            parameter were iterable, with the non-r parameter having shape ``(n1, n2, ..., nn)``
+            (which of course may be only one item!), then this returns an array of shape
+            ``(n1, n2, ..., nn, len(r))``.
+        """
+        sigma = self.sigma_exponential(r, M, c, z_lens, r_mis=r_mis, P_cen=P_cen, skip_reformat=True)
+        sci = self.sigma_crit_inverse(z_lens, z_source)
+        return sci*sigma
+    
+    @reshape_multisource
+    def g_exponential(self, r, M, c, z_lens, z_source, r_mis=0, P_cen=0, z_source_pdf=None):
+        """Return an NFW reduced shear from an internal interpolation table, assuming that the
+        miscentering takes the form of an exponential distribution plus a delta function:
+        fraction `0<P_cen<1` of the halos have correct centers, while the ones which are miscentered
+        have a exponential distribution with scale length r_mis.
+        
+        Parameters
+        ----------
+        r : float or iterable
+            The radius or radii (in length, not angular, units) at which to evaluate the function.
+            Whatever definition (comoving/not, etc) you used for your cosmology object should be
+            replicated here.  This can be an object with astropy units of length; if not it is
+            assumed to be in Mpc/h.
+        M : float or iterable
+            The mass of the halo at the overdensity definition given at class initialization. If
+            this is an iterable, all other non-r parameters must be either iterables with the same
+            length or floats. This can be an object with astropy units of mass; if not it is assumed
+            to be in h Msun.
+        c : float or iterable
+            The concentration of the halo at the overdensity definition given at class 
+            initialization.  If this is an iterable, all other non-r parameters must be either
+            iterables with the same length or floats.
+        r_mis : float or iterable
+            The distance (in length units) between the reported center of the halo and the actual
+            assumed to be in Mpc/h.
+            center of the halo.  Whatever definition (comoving/not, etc) you used for your cosmology
+            object should be replicated here.  This can be an object with astropy units of length;
+            if not it is assumed to be in Mpc/h.  If this is an iterable, all other non-r parameters
+            must be either iterables with the same length or floats.
+        
+        Returns
+        -------
+        float or numpy.ndarray
+            Returns the value of g at the requested parameters. If every parameter was a
+            float, this is a float. If only r OR some of the non-r parameters were iterable, this is
+            a 1D array with the same length as the iterable parameters.  If both r and another
+            parameter were iterable, with the non-r parameter having shape ``(n1, n2, ..., nn)``
+            (which of course may be only one item!), then this returns an array of shape
+            ``(n1, n2, ..., nn, len(r))``.
+        """
+        return (self.gamma_exponential(r, M, c, z_lens, z_source, r_mis=r_mis, P_cen=P_cen, skip_reformat=True)
+                 /(1.-self.kappa_exponential(r, M, c, z_lens, z_source, r_mis=r_mis, P_cen=P_cen, skip_reformat=True)))
+
