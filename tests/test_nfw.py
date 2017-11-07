@@ -2,6 +2,8 @@ import numpy
 import numpy.testing
 import astropy.cosmology
 import astropy.units as u
+import os
+import glob
 try:
     import offset_nfw
 except ImportError:
@@ -217,7 +219,7 @@ def test_against_clusterlensing_theory():
         import warnings
         warnings.warn("Could not test against cluster-lensing -- import failure")
 
-def test_sigma_to_deltasigma_theory():
+def test_sigma_to_deltasigma_theory(plot=False):
     """ Test that the numerical sigma -> deltasigma produces the theoretical DS. """
     radbins = numpy.exp(numpy.linspace(numpy.log(0.001), numpy.log(100), num=500))
     nfw_1 = offset_nfw.NFWModel(cosmo, delta=200, rho='rho_c')
@@ -225,31 +227,31 @@ def test_sigma_to_deltasigma_theory():
         ds = nfw_1.deltasigma_theory(radbins, m, c, z)
         sig = nfw_1.sigma_theory(radbins, m, c, z)
         ds_from_sigma = nfw_1.sigma_to_deltasigma(radbins, sig)
-        import matplotlib.pyplot as plt
         n_to_keep=int(len(radbins)*0.6)
         numpy.testing.assert_almost_equal(ds.value[-n_to_keep:], ds_from_sigma.value[-n_to_keep:], decimal=3)
         numpy.testing.assert_equal(ds.unit, ds_from_sigma.unit)
-        import matplotlib.pyplot as plt
-        plt.plot(radbins, ds_from_sigma/ds, label="ds")
-#        plt.plot(radbins, ds_from_sigma, label="ds from sigma")
-        plt.xscale('log')
-        plt.ylim((0., 2))
-        plt.savefig('test.png')
+        if plot:
+            import matplotlib.pyplot as plt
+            plt.plot(radbins, ds_from_sigma/ds, label="ds")
+    #        plt.plot(radbins, ds_from_sigma, label="ds from sigma")
+            plt.xscale('log')
+            plt.ylim((0., 2))
+            plt.savefig('test.png')
     for m, c, z in m_c_z_multi_test_list:
         ds = nfw_1.deltasigma_theory(radbins, m, c, z)
         sig = nfw_1.sigma_theory(radbins, m, c, z)
         ds_from_sigma = nfw_1.sigma_to_deltasigma(radbins, sig)
-        import matplotlib.pyplot as plt
         n_to_keep=int(len(radbins)*0.6)
         numpy.testing.assert_almost_equal(ds.value[:,-n_to_keep:], ds_from_sigma.value[:,-n_to_keep:], decimal=3)
         numpy.testing.assert_equal(ds.unit, ds_from_sigma.unit)
-        import matplotlib.pyplot as plt
-        plt.plot(radbins, ds_from_sigma[0]/ds[0], label="ds")
-        plt.plot(radbins, ds_from_sigma[1]/ds[1], label="ds")
-#        plt.plot(radbins, ds_from_sigma, label="ds from sigma")
-        plt.xscale('log')
-        plt.ylim((0., 2))
-        plt.savefig('test.png')
+        if plot:
+            import matplotlib.pyplot as plt
+            plt.plot(radbins, ds_from_sigma[0]/ds[0], label="ds")
+            plt.plot(radbins, ds_from_sigma[1]/ds[1], label="ds")
+    #        plt.plot(radbins, ds_from_sigma, label="ds from sigma")
+            plt.xscale('log')
+            plt.ylim((0., 2))
+            plt.savefig('test.png')
     #TODO: do again, miscentered
         
 def test_z_ratios_theory():
@@ -353,17 +355,17 @@ def test_setup_table():
     cosmology_obj = fake_cosmo()
     for xr in [(0.1, 0.2), (0.57, 1.83), (5,7)]:
         nfw_halo = offset_nfw.NFWModel(cosmology_obj, x_range=xr)
-        nfw_halo._setupTables()
+        nfw_halo._buildTables()
         numpy.testing.assert_array_almost_equal_nulp(nfw_halo.table_x[0], xr[0])
         numpy.testing.assert_array_almost_equal_nulp(nfw_halo.table_x[-1], xr[1])
         numpy.testing.assert_array_almost_equal_nulp(nfw_halo.table_x[0], nfw_halo.x_min)
         numpy.testing.assert_array_almost_equal_nulp(nfw_halo.table_x[-1], nfw_halo.x_max)
     numpy.testing.assert_raises(RuntimeError, offset_nfw.NFWModel, cosmology_obj, x_range=[-1,1])
     nfw_halo = offset_nfw.NFWModel(cosmology_obj, x_range=[1.0,2.0])
-    nfw_halo._setupTables()
+    nfw_halo._buildTables()
     costheta = nfw_halo.cos_theta_table.flatten()
     numpy.testing.assert_equal(costheta[0], 1.)
-    numpy.testing.assert_approx_equal(costheta[-1], 1.)
+    numpy.testing.assert_approx_equal(costheta[-1], 1., significant=4)
     numpy.testing.assert_approx_equal(costheta[len(costheta)/2], -1., significant=4)
 
 def test_build_sigma():
@@ -371,8 +373,8 @@ def test_build_sigma():
     cosmology_obj = fake_cosmo()
     for xr in [(0.1,0.99), (1.01,2.0), (1.0, 2.0), (0.1,2.0)]:
         nfw_halo = offset_nfw.NFWModel(cosmology_obj, x_range=xr)
-        nfw_halo._setupTables()
-        nfw_halo._buildSigma()
+        nfw_halo._buildTables()
+        nfw_halo._buildSigma(save=False)
         numpy.testing.assert_equal(nfw_halo._sigma.shape, (len(nfw_halo.table_x),)) 
         numpy.testing.assert_array_less(0, nfw_halo._sigma)
         nfw_halo._setupSigma()
@@ -385,10 +387,10 @@ def test_build_miscentered_sigma():
     cosmology_obj = fake_cosmo()
     for xr in [(0.1,0.99), (1.01,2.0), (1.0, 2.0), (0.1,2.0)]:
         nfw_halo = offset_nfw.NFWModel(cosmology_obj, x_range=xr, precision=1)
-        nfw_halo._setupTables()
-        nfw_halo._buildSigma()
+        nfw_halo._buildTables()
+        nfw_halo._buildSigma(save=False)
         nfw_halo._setupSigma()
-        nfw_halo._buildMiscenteredSigma()
+        nfw_halo._buildMiscenteredSigma(save=False)
         n = len(nfw_halo.table_x)
         numpy.testing.assert_equal(nfw_halo._miscentered_sigma.shape, (n,n)) 
         nfw_halo._setupMiscenteredSigma()
@@ -405,8 +407,8 @@ def test_build_deltasigma():
     cosmology_obj = fake_cosmo()
     for xr in [(0.1,0.99), (1.01,2.0), (1.0, 2.0), (0.1,2.0)]:
         nfw_halo = offset_nfw.NFWModel(cosmology_obj, x_range=xr)
-        nfw_halo._setupTables()
-        nfw_halo._buildDeltaSigma()
+        nfw_halo._buildTables()
+        nfw_halo._buildDeltaSigma(save=False)
         numpy.testing.assert_equal(nfw_halo._deltasigma.shape, (len(nfw_halo.table_x),)) 
         numpy.testing.assert_array_less(0, nfw_halo._deltasigma)
         nfw_halo._setupDeltaSigma()
@@ -420,11 +422,11 @@ def test_build_miscentered_deltasigma():
     cosmology_obj = fake_cosmo()
     for xr in [(0.1,0.99), (1.01,2.0), (1.0, 2.0), (0.1,2.0)]:
         nfw_halo = offset_nfw.NFWModel(cosmology_obj, x_range=xr, precision=1)
-        nfw_halo._setupTables()
-        nfw_halo._buildSigma()
+        nfw_halo._buildTables()
+        nfw_halo._buildSigma(save=False)
         nfw_halo._setupSigma()
-        nfw_halo._buildMiscenteredSigma()
-        nfw_halo._buildMiscenteredDeltaSigma()
+        nfw_halo._buildMiscenteredSigma(save=False)
+        nfw_halo._buildMiscenteredDeltaSigma(save=False)
         n = len(nfw_halo.table_x)
         numpy.testing.assert_equal(nfw_halo._miscentered_deltasigma.shape, (n,n)) 
         nfw_halo._setupMiscenteredDeltaSigma()
@@ -438,9 +440,9 @@ def test_probabilities():
     import scipy.interpolate
     cosmology_obj = fake_cosmo()
     nfw_halo = offset_nfw.NFWModel(cosmology_obj)
-    nfw_halo._setupTables()
-    nfw_halo._buildRayleighProbabilities()
-    nfw_halo._buildExponentialProbabilities()
+    nfw_halo._buildTables()
+    nfw_halo._buildRayleighProbabilities(save=False)
+    nfw_halo._buildExponentialProbabilities(save=False)
 
     n = len(nfw_halo.table_x)
     x_min = nfw_halo.x_min
@@ -451,31 +453,31 @@ def test_probabilities():
     logr_mult = numpy.sqrt(logr_interval)-1./numpy.sqrt(logr_interval)
     dx = logr_mult*nfw_halo.table_x
 
-    this_rayleigh = nfw_halo.rayleigh_p*nfw_halo._rayleigh_orig/dx
+    this_rayleigh = nfw_halo._rayleigh_p*nfw_halo._rayleigh_orig/dx
     rayleigh_table = scipy.interpolate.RegularGridInterpolator(
         (numpy.log(nfw_halo.table_x), numpy.log(nfw_halo.table_x)),
         this_rayleigh)
-    numpy.testing.assert_approx_equal(numpy.sum(nfw_halo.rayleigh_p), n)
-    numpy.testing.assert_array_almost_equal(numpy.sum(nfw_halo.rayleigh_p, axis=1), numpy.ones(n))
+    numpy.testing.assert_approx_equal(numpy.sum(nfw_halo._rayleigh_p), n)
+    numpy.testing.assert_array_almost_equal(numpy.sum(nfw_halo._rayleigh_p, axis=1), numpy.ones(n))
     numpy.testing.assert_array_almost_equal(rayleigh_table((numpy.log(random_xmis), numpy.log(random_x))),
         random_x/random_xmis**2*numpy.exp(-0.5*(random_x**2/random_xmis**2)))
     # Test integral rayleigh table *x, which should come out to sqrt(pi/2)*x_miscentering.
     # Chop off the bottom quarter and the top quarter, which hit the edges too much
     q = int(0.25*n)
-    numpy.testing.assert_array_almost_equal(numpy.sum(nfw_halo.table_x*nfw_halo.rayleigh_p,axis=1)[q:-q],
+    numpy.testing.assert_array_almost_equal(numpy.sum(nfw_halo.table_x*nfw_halo._rayleigh_p,axis=1)[q:-q],
         numpy.sqrt(numpy.pi/2)*nfw_halo.table_x[q:-q], decimal=4)
 
-    this_exponential = nfw_halo.exponential_p*nfw_halo._exponential_orig/dx
+    this_exponential = nfw_halo._exponential_p*nfw_halo._exponential_orig/dx
     exponential_table = scipy.interpolate.RegularGridInterpolator(
         (numpy.log(nfw_halo.table_x), numpy.log(nfw_halo.table_x)),
         this_exponential)
-    numpy.testing.assert_approx_equal(numpy.sum(nfw_halo.exponential_p), n)
-    numpy.testing.assert_array_almost_equal(numpy.sum(nfw_halo.exponential_p, axis=1), numpy.ones(n))
+    numpy.testing.assert_approx_equal(numpy.sum(nfw_halo._exponential_p), n)
+    numpy.testing.assert_array_almost_equal(numpy.sum(nfw_halo._exponential_p, axis=1), numpy.ones(n))
     numpy.testing.assert_array_almost_equal(exponential_table((numpy.log(random_xmis), numpy.log(random_x))),
         random_x/random_xmis**2*numpy.exp(-random_x/random_xmis))
     # Test integral exponential table *x, which should come out to 2*x_miscentering.
     # Chop off the bottom quarter and the top quarter, which hit the edges too much
-    numpy.testing.assert_array_almost_equal(numpy.sum(nfw_halo.table_x*nfw_halo.exponential_p,axis=1)[q:-q],
+    numpy.testing.assert_array_almost_equal(numpy.sum(nfw_halo.table_x*nfw_halo._exponential_p,axis=1)[q:-q],
         2*nfw_halo.table_x[q:-q], decimal=4)
         
 def test_probability_signal_tables():
@@ -483,28 +485,28 @@ def test_probability_signal_tables():
     # miscentered profile, properly summed.
     cosmology_obj = fake_cosmo()
     nfw_halo = offset_nfw.NFWModel(cosmology_obj, precision=1)
-    nfw_halo._setupTables()
-    nfw_halo._buildSigma()
+    nfw_halo._buildTables()
+    nfw_halo._buildSigma(save=False)
     nfw_halo._setupSigma()
-    nfw_halo._buildMiscenteredSigma()
-    nfw_halo._buildMiscenteredDeltaSigma()
-    nfw_halo._buildRayleighProbabilities()
-    nfw_halo._buildExponentialProbabilities()
-    nfw_halo._buildRayleighSigma()
-    nfw_halo._buildExponentialSigma()
-    nfw_halo._buildRayleighDeltaSigma()
-    nfw_halo._buildExponentialDeltaSigma()
+    nfw_halo._buildMiscenteredSigma(save=False)
+    nfw_halo._buildMiscenteredDeltaSigma(save=False)
+    nfw_halo._buildRayleighProbabilities(save=False)
+    nfw_halo._buildExponentialProbabilities(save=False)
+    nfw_halo._buildRayleighSigma(save=False)
+    nfw_halo._buildExponentialSigma(save=False)
+    nfw_halo._buildRayleighDeltaSigma(save=False)
+    nfw_halo._buildExponentialDeltaSigma(save=False)
 
     n = len(nfw_halo.table_x)
     check_rows = numpy.random.randint(0,n,n/10)
     for row in check_rows:
-        test_point = numpy.sum(nfw_halo.exponential_p[row]*nfw_halo._miscentered_sigma[:,1])
+        test_point = numpy.sum(nfw_halo._exponential_p[row]*nfw_halo._miscentered_sigma[:,1])
         numpy.testing.assert_equal(test_point, nfw_halo._exponential_sigma[row,1]) 
-        test_row = numpy.sum(nfw_halo.exponential_p[row, numpy.newaxis]*nfw_halo._miscentered_sigma, axis=1)
+        test_row = numpy.sum(nfw_halo._exponential_p[row, numpy.newaxis]*nfw_halo._miscentered_sigma, axis=1)
         numpy.testing.assert_equal(test_row, nfw_halo._exponential_sigma[row])
-        test_point = numpy.sum(nfw_halo.rayleigh_p[row]*nfw_halo._miscentered_sigma[:,1])
+        test_point = numpy.sum(nfw_halo._rayleigh_p[row]*nfw_halo._miscentered_sigma[:,1])
         numpy.testing.assert_equal(test_point, nfw_halo._rayleigh_sigma[row,1]) 
-        test_row = numpy.sum(nfw_halo.rayleigh_p[row, numpy.newaxis]*nfw_halo._miscentered_sigma, axis=1)
+        test_row = numpy.sum(nfw_halo._rayleigh_p[row, numpy.newaxis]*nfw_halo._miscentered_sigma, axis=1)
         numpy.testing.assert_equal(test_row, nfw_halo._rayleigh_sigma[row])
         
     nfw_halo._setupRayleighSigma()

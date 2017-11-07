@@ -6,6 +6,7 @@ the user-facing functions in other files, but they should still at least be read
 
 import numpy
 import astropy.units as u
+from functools import wraps
 from inspect import getargspec
 
 def _form_iterables(*args):
@@ -14,6 +15,11 @@ def _form_iterables(*args):
     original_args = args
     r = numpy.atleast_1d(args[0])
     args = args[1:]
+    # A lot of these "iterability" checks don't work on astropy.Quantities, so un-make the
+    # Quantities and then remake them at the end.
+    arg_units = [a.unit if hasattr(a, 'unit') else 1 for a in args]
+    args = [a.value if hasattr(a, 'value') else a for a in args]
+    
     # Don't do anything if everything non-r is a scalar, or if r is a scalar
     is_iterable = [hasattr(a, '__iter__') and len(a)>1 for a in args]
     if sum(is_iterable)==0 or (len(r)==1 and not hasattr(original_args[0], "__iter__")):
@@ -29,23 +35,26 @@ def _form_iterables(*args):
     # for multi-dimensional arrays, lol).
     args = [numpy.atleast_1d(a) if hasattr(a, '__len__') else a for a in args]
     args = [a[:,numpy.newaxis] if isinstance(a, numpy.ndarray) else a for a in args]
+    args = [a*au if a is not None else a for a, au in zip(args, arg_units)]
     return (r,)+tuple(args)
 
-def _form_iterables_multisource(nargs, *args):
+def _form_iterables_multisource(nargs, z_indx, *args):
     """ Make input arrays broadcastable in the way we want, in the case where we have source 
     redshifts to contend with.  Argument nargs is the number of args passed to func; this is 
     assumed to INCLUDE a self argument that won't get passed to this decorator."""
     original_args = args
+    z_source = args[z_indx]
+    args = args[:z_indx]+args[z_indx+1:]
     r = args[0]
-    if len(args)==nargs-1:
-        z_source = args[-2]
-        args = args[1:-2]
-    else:
-        z_source = args[-1]
-        args = args[1:-1]
+    args = args[1:]
+    # A lot of these "iterability" checks don't work on astropy.Quantities, so un-make the
+    # Quantities and then remake them at the end.
+    arg_units = [a.unit if hasattr(a, 'unit') else 1 for a in args]
+    args = [a.value if hasattr(a, 'value') else a for a in args]
     is_iterable = [hasattr(a, '__iter__') and len(a)>1 for a in args]
     r_is_iterable = hasattr(r, '__iter__')
     sz_is_iterable = hasattr(z_source, '__iter__')
+#    print args, z_source, original_args, z_indx
 
     # If only max one of these arguments is iterable, no need to broadcast
     if r_is_iterable+sz_is_iterable+sum(is_iterable)<2:
@@ -77,20 +86,24 @@ def _form_iterables_multisource(nargs, *args):
     z_source = numpy.atleast_1d(z_source)
     args = [numpy.atleast_1d(a) if hasattr(a, '__len__') else a for a in args]
     args = [a[:,numpy.newaxis] if isinstance(a, numpy.ndarray) else a for a in args]
+    args = [a*au if a is not None else a for a, au in zip(args, arg_units)]
     z_source = z_source[:,numpy.newaxis,numpy.newaxis]
-    return (r,)+tuple(args)+(z_source,)
+    args.insert(z_indx-1, z_source)
+    return (r,)+tuple(args)
 
 def reshape(func):
     """This is a decorator to handle reforming input vectors into something broadcastable for easy
     multiplication or interpolation table calls.  Arrays can generally be arbitrary shapes.  
     Pass the kwarg 'skip_reformat' to skip this process (mainly
     used for OffsetNFW object methods that reference other methods)."""
+    @wraps(func)
     def wrap_shapes(self, *args, **kwargs):
         skip_reformat = kwargs.pop('skip_reformat', False)
         if skip_reformat:
             return func(self, *args, **kwargs)
         new_args = _form_iterables(*args)
-        return func(self, *new_args, **kwargs)
+        # all kwargs should have been consumed above
+        return func(self, *new_args)
     return wrap_shapes
 
 
@@ -102,19 +115,39 @@ def reshape_multisource(func):
     to return the full array).  Arrays can generally be arbitrary shapes, but source redshift
     pdfs must be one-dimensional.  Pass the kwarg 'skip_reformat' to skip this process (mainly
     used for OffsetNFW object methods that reference other methods)."""
+    @wraps(func)
     def wrap_shapes(self, *args, **kwargs):
         skip_reformat = kwargs.pop('skip_reformat', False)
         if skip_reformat:
             return func(self, *args, **kwargs)
+        call_sig = getargspec(func)
+        all_args = list(args) +[None]*(len(call_sig.args)-len(args)-1)
+        replaced_arg = [True]*len(args)+[False]*(len(call_sig.args)-len(args)-1)
+        for key in kwargs:
+            ind = call_sig.args.index(key)-1
+            if all_args[ind] is not None:
+                raise TypeError("Positional and keyword argument passed for %s"%key)
+            all_args[ind] = kwargs[key]
+            replaced_arg[ind] = True
+        for i in range(1,len(call_sig.defaults)+1):
+            if all_args[-i] is None and not call_sig.args[-i] in kwargs:
+                all_args[-i] = call_sig.defaults[-i]
+                replaced_arg[-i] = True
+        if numpy.any(replaced_arg==False):
+            ind = replaced_arg.index(False)
+            raise TypeError("Call to %s missing argument %s"%(func, call_sig.args[ind+1]))
+        z_indx = call_sig.args.index('z_source')-1
+        zs_indx = call_sig.args.index('z_source_pdf')-1
+        zs = all_args[zs_indx]
+        all_args = list(all_args)
+        all_args[zs_indx] = None
+        
         nargs = len(getargspec(func).args)
-        new_args = _form_iterables_multisource(nargs, *args)
-        result = func(self, *new_args, **kwargs)
+        new_args = _form_iterables_multisource(nargs, z_indx, *all_args)
+        # all kwargs should have been consumed above
+        result = func(self, *new_args)
 
-        if (len(args)==nargs-1 and args[-1] is not None) or 'z_source_pdf' in kwargs:
-            if 'z_source_pdf' in kwargs:
-                zs = kwargs['z_source_pdf']
-            else:
-                zs = args[-1]
+        if zs is not None:
             if hasattr(zs, '__iter__'):
                 return numpy.sum(zs[:, numpy.newaxis, numpy.newaxis]*result, axis=-1)
             else:

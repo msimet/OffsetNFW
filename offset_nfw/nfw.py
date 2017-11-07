@@ -56,7 +56,9 @@ class NFWModel(object):
         values other than the default.  [default: (0.0003, 300)]
     """
     def __init__(self, cosmology, dir='.', rho='rho_m', comoving=True, delta=200,
-        precision=0.01, x_range=(0.0003, 300)):
+                       precision=0.01, x_range=(0.0003, 300), table_slug="", 
+                       deltasigma=True, sigma=True, 
+                       rayleigh=True, exponential=True):
 
         if not os.path.exists(dir):
             raise RuntimeError("Nonexistent save directory passed to NFWModel")
@@ -110,6 +112,12 @@ class NFWModel(object):
             x_range = [x_range[1], x_range[0]]
         self.x_range = x_range
         
+        self.table_file_root = os.path.join(self.dir, '.offset_nfw_table')
+        if table_slug:
+            self.table_file_root = self.table_file_root+'_'+table_slug
+        self.table_file_root = self.table_file_root+'precision_%.03f_xrange_%.4f_%.1f'%(
+                                                                precision, x_range[0], x_range[1])
+        
         # Useful quantity in scaling profiles
         self._rmod = (3./(4.*numpy.pi)/self.delta)**0.33333333
         
@@ -119,40 +127,104 @@ class NFWModel(object):
             from functools import partial
             from .cosmology import sigma_crit_inverse
             self.sigma_crit_inverse = partial(sigma_crit_inverse, self.cosmology)
+        
+        self._loadTables(sigma, deltasigma, rayleigh, exponential)
 
-    def generate(self, do_sigma=True, do_deltasigma=True, do_rayleigh=False, do_exponential=False):
-        self._setupTables()
-        if do_rayleigh:
-            self._setupRayleighProbabilities()
-        if do_exponential:
-            self.setupExponentialProbabilities()
-        if do_sigma or do_deltasigma:
+    def generate(self, sigma=True, deltasigma=True, rayleigh=True, exponential=True, save=True):
+        self._buildTables()
+        if rayleigh:
+            self._buildRayleighProbabilities(save=save)
+        if exponential:
+            self._buildExponentialProbabilities(save=save)
+        if sigma or deltasigma:
+            self._buildSigma(save=save)
             self._setupSigma()
-            self._buildSigma()
-            self._setupMiscenteredSigma()
-            if do_rayleigh and do_sigma:
-                self._buildRayleighSigma()
-            if do_exponential and do_sigma:
-                self._buildExponentialSigma()
-        if do_deltasigma:
-            self._buildMiscenteredSigma()
+            self._buildMiscenteredSigma(save=save)
+            if rayleigh:
+                self._buildRayleighSigma(save=save)
+            if exponential:
+                self._buildExponentialSigma(save=save)
+            if sigma:
+                self._setupMiscenteredSigma()
+                if rayleigh:
+                    self._setupRayleighSigma()
+                if exponential:
+                    self._setupExponentialSigma()
+        if deltasigma:
+            self._buildDeltaSigma(save=save)
+            self._setupDeltaSigma()
+            self._buildMiscenteredDeltaSigma(save=save)
             self._setupMiscenteredDeltaSigma()
-            if do_rayleigh:
-                self._buildRayleighDeltaSigma()
-            if do_exponential:
-                self._buildExponentialDeltaSigma()
+            if rayleigh:
+                self._buildRayleighDeltaSigma(save=save)
+                self._setupRayleighDeltaSigma()
+            if exponential:
+                self._buildExponentialDeltaSigma(save=save)
+                self._setupExponentialDeltaSigma()
 
-    def _setupTables(self):
+    def _loadTables(self, sigma=False, deltasigma=False, 
+                          rayleigh=False, exponential=False):
+        self._buildTables()
+        if sigma:
+            try:
+                self._sigma = numpy.load(self.table_file_root+'_sigma.npy')
+                self._setupSigma()
+            except IOError:
+                pass
+            try:
+                self._miscentered_sigma = numpy.load(self.table_file_root+'_miscentered_sigma.npy')
+                self._setupMiscenteredSigma()
+            except IOError:
+                pass
+            
+            if rayleigh:
+                try:
+                    self._rayleigh_sigma = numpy.load(self.table_file_root+'_rayleigh_sigma.npy')
+                    self._setupRayleighSigma()
+                except IOError:
+                    pass
+            if exponential:
+                try:
+                    self._exponential_sigma = numpy.load(self.table_file_root+'_exponential_sigma.npy')
+                    self._setupExponentialSigma()
+                except IOError:
+                    pass
+        if deltasigma:
+            try:
+                self._deltasigma = numpy.load(self.table_file_root+'_deltasigma.npy')
+                self._setupDeltaSigma()
+            except IOError:
+                pass
+            try:
+                self._miscentered_deltasigma = numpy.load(self.table_file_root+'_miscentered_deltasigma.npy')
+                self._setupMiscenteredDeltaSigma()
+            except IOError:
+                pass
+            if rayleigh:
+                try:
+                    self._rayleigh_deltasigma = numpy.load(self.table_file_root+'_rayleigh_deltasigma.npy')
+                    self._setupRayleighDeltaSigma()
+                except IOError:
+                    pass
+            if exponential:
+                try:
+                    self._exponential_deltasigma = numpy.load(self.table_file_root+'_exponential_deltasigma.npy')
+                    self._setupExponentialDeltaSigma()
+                except IOError:
+                    pass
+            
+
+    def _buildTables(self):
         self.table_x = numpy.logspace(numpy.log10(self.x_range[0]), numpy.log10(self.x_range[1]), 
                                       num=int(50./self.precision))
         self.x_min = numpy.min(self.table_x)
         self.x_max = numpy.max(self.table_x)
-        self.dx = self.table_x[1]/self.table_x[0]
-        table_angle = numpy.linspace(0, 2.*numpy.pi, int(2.*numpy.pi/self.precision))
+        self.dx = numpy.log(self.table_x[1]/self.table_x[0])*self.table_x
+        table_angle = numpy.linspace(0, 2.*numpy.pi, int(2.*numpy.pi/self.precision), endpoint=False)
         self.cos_theta_table = numpy.cos(table_angle)[:, numpy.newaxis]
+        self.dtheta = table_angle[1]-table_angle[0]
 
-
-    def _buildSigma(self):
+    def _buildSigma(self, save=True):
         self._sigma = numpy.zeros_like(self.table_x)
         xm = self.table_x<1
         self._sigma[xm] = self._sigmalt(self.table_x[xm])
@@ -160,24 +232,28 @@ class NFWModel(object):
         self._sigma[xm] = self._sigmaeq(self.table_x[xm])
         xm = self.table_x>1
         self._sigma[xm] = self._sigmagt(self.table_x[xm])
+        if save:
+            numpy.save(self.table_file_root+'_sigma.npy', self._sigma)
 
     def _setupSigma(self):
         self._sigma_table = scipy.interpolate.interp1d(numpy.log(self.table_x), self._sigma,
                                                        fill_value=0, bounds_error=False)
 
-    def _buildMiscenteredSigma(self):
+    def _buildMiscenteredSigma(self, save=True):
         self._miscentered_sigma = numpy.array([numpy.sum(
-            self._sigma_table(
+            self.dtheta*self._sigma_table(
                 0.5*numpy.log(
                     self.table_x*self.table_x+tx*tx
-                        +2*self.table_x*self.cos_theta_table*tx)),axis=0) for tx in self.table_x])
+                        +2*self.table_x*self.cos_theta_table*tx)),axis=0) for tx in self.table_x])/(2.*numpy.pi)
+        if save:
+            numpy.save(self.table_file_root+'_miscentered_sigma.npy', self._miscentered_sigma)
         # TODO: figure out if you need to trim egregious problems        
 
     def _setupMiscenteredSigma(self):
         self._miscentered_sigma_table = scipy.interpolate.RegularGridInterpolator(
             (numpy.log(self.table_x), numpy.log(self.table_x)), self._miscentered_sigma)
 
-    def _buildDeltaSigma(self):
+    def _buildDeltaSigma(self, save=True):
         self._deltasigma = numpy.zeros_like(self.table_x)
         xm = self.table_x<1
         self._deltasigma[xm] = self._deltasigmalt(self.table_x[xm])
@@ -185,63 +261,79 @@ class NFWModel(object):
         self._deltasigma[xm] = self._deltasigmaeq(self.table_x[xm])
         xm = self.table_x>1
         self._deltasigma[xm] = self._deltasigmagt(self.table_x[xm])
+        if save:
+            numpy.save(self.table_file_root+'_deltasigma.npy', self._deltasigma)
 
     def _setupDeltaSigma(self):
         self._deltasigma_table = scipy.interpolate.interp1d(numpy.log(self.table_x), self._deltasigma,
                                                        fill_value=0, bounds_error=False)
 
-    def _buildMiscenteredDeltaSigma(self):
+    def _buildMiscenteredDeltaSigma(self, save=True):
         self._miscentered_deltasigma = numpy.array([self.sigma_to_deltasigma(self.table_x, ms) for ms in self._miscentered_sigma])
+        if save:
+            numpy.save(self.table_file_root+'_miscentered_deltasigma.npy', self._miscentered_deltasigma)
 
     def _setupMiscenteredDeltaSigma(self):
         self._miscentered_deltasigma_table = scipy.interpolate.RegularGridInterpolator(
             (numpy.log(self.table_x), numpy.log(self.table_x)), self._miscentered_deltasigma)
 
-    def _buildRayleighProbabilities(self):
+    def _buildRayleighProbabilities(self, save=True):
         logr_interval = self.table_x[1]/self.table_x[0]
         logr_mult = numpy.sqrt(logr_interval)-1./numpy.sqrt(logr_interval)
-        self.rayleigh_p = self.table_x/self.table_x[:,numpy.newaxis]**2*numpy.exp(-0.5*(self.table_x/self.table_x[:,numpy.newaxis])**2)*(self.table_x*logr_mult) # last term is dx!
+        self._rayleigh_p = self.table_x/self.table_x[:,numpy.newaxis]**2*numpy.exp(-0.5*(self.table_x/self.table_x[:,numpy.newaxis])**2)*(self.table_x*logr_mult) # last term is dx!
         # This accounts for the fact that we don't go from x=0 to infinity.
         # Comment out this line to check accuracy (tends to be off by ~5% for typical precision and
         # xrange, but note that the missing weights are multiplying things at large radii where the
         # signal is small.
-        # self.rayleigh_orig stores the original sum for cross-checks.
-        self._rayleigh_orig = numpy.sum(self.rayleigh_p, axis=1)[:, numpy.newaxis]
-        self.rayleigh_p /= self._rayleigh_orig
+        # self._rayleigh_orig stores the original sum for cross-checks.
+        self._rayleigh_orig = numpy.sum(self._rayleigh_p, axis=1)[:, numpy.newaxis]
+        self._rayleigh_p /= self._rayleigh_orig
+        if save:
+            numpy.save(self.table_file_root+'_rayleigh_p.npy', self._rayleigh_p)
+            numpy.save(self.table_file_root+'_rayleigh_orig.npy', self._rayleigh_orig)
 
-    def _buildExponentialProbabilities(self):
+    def _buildExponentialProbabilities(self, save=True):
         logr_interval = self.table_x[1]/self.table_x[0]
         logr_mult = numpy.sqrt(logr_interval)-1./numpy.sqrt(logr_interval)
-        self.exponential_p = self.table_x/self.table_x[:,numpy.newaxis]**2*numpy.exp(-self.table_x/self.table_x[:, numpy.newaxis])*self.table_x*logr_mult # last term is dx!
+        self._exponential_p = self.table_x/self.table_x[:,numpy.newaxis]**2*numpy.exp(-self.table_x/self.table_x[:, numpy.newaxis])*self.table_x*logr_mult # last term is dx!
         # This accounts for the fact that we don't go from x=0 to infinity.
         # Comment out this line to check accuracy (tends to be off by ~5% for typical precision and
         # xrange, but note that the missing weights are multiplying things at large radii where the
         # signal is small.
-        # self.exponential_orig stores the original sum for cross-checks.
-        self._exponential_orig = numpy.sum(self.exponential_p, axis=1)[:, numpy.newaxis]
-        self.exponential_p /= self._exponential_orig
+        # self._exponential_orig stores the original sum for cross-checks.
+        self._exponential_orig = numpy.sum(self._exponential_p, axis=1)[:, numpy.newaxis]
+        self._exponential_p /= self._exponential_orig
+        if save:
+            numpy.save(self.table_file_root+'_exponential_p.npy', self._exponential_p)
+            numpy.save(self.table_file_root+'_exponential_orig.npy', self._exponential_orig)
 
-    def _buildRayleighSigma(self):
-        self._rayleigh_sigma = numpy.sum(self.rayleigh_p[:, numpy.newaxis]*self._miscentered_sigma, axis=2)
+    def _buildRayleighSigma(self, save=True):
+        self._rayleigh_sigma = numpy.sum(self._rayleigh_p[:, numpy.newaxis]*self._miscentered_sigma, axis=2)
+        if save:
+            numpy.save(self.table_file_root+'_rayleigh_sigma.npy', self._rayleigh_sigma)
     def _setupRayleighSigma(self):
         self._rayleigh_sigma_table = scipy.interpolate.RegularGridInterpolator((numpy.log(self.table_x), numpy.log(self.table_x)), self._rayleigh_sigma)
 
-    def _buildRayleighDeltaSigma(self):
+    def _buildRayleighDeltaSigma(self, save=True):
         self._rayleigh_deltasigma = numpy.array([self.sigma_to_deltasigma(self.table_x, rs) for rs in self._rayleigh_sigma])
+        if save:
+            numpy.save(self.table_file_root+'_rayleigh_deltasigma.npy', self._rayleigh_deltasigma)
     def _setupRayleighDeltaSigma(self):
         self._rayleigh_deltasigma_table = scipy.interpolate.RegularGridInterpolator((numpy.log(self.table_x), numpy.log(self.table_x)), self._rayleigh_deltasigma)
 
-    def _buildExponentialSigma(self):
-        self._exponential_sigma = numpy.sum(self.exponential_p[:, numpy.newaxis]*self._miscentered_sigma, axis=2)
+    def _buildExponentialSigma(self, save=True):
+        self._exponential_sigma = numpy.sum(self._exponential_p[:, numpy.newaxis]*self._miscentered_sigma, axis=2)
+        if save:
+            numpy.save(self.table_file_root+'_exponential_sigma.npy', self._exponential_sigma)
     def _setupExponentialSigma(self):
         self._exponential_sigma_table = scipy.interpolate.RegularGridInterpolator((numpy.log(self.table_x), numpy.log(self.table_x)), self._exponential_sigma)
 
-    def _buildExponentialDeltaSigma(self):
+    def _buildExponentialDeltaSigma(self, save=True):
         self._exponential_deltasigma = numpy.array([self.sigma_to_deltasigma(self.table_x, es) for es in self._exponential_sigma])
+        if save:
+            numpy.save(self.table_file_root+'_exponential_deltasigma.npy', self._exponential_deltasigma)
     def _setupExponentialDeltaSigma(self):
         self._exponential_deltasigma_table = scipy.interpolate.RegularGridInterpolator((numpy.log(self.table_x), numpy.log(self.table_x)), self._exponential_deltasigma)
-
-        
         
     # Per Brainerd and Wright (arXiv:), these are the analytic descriptions of the 
     # NFW lensing profiles.
@@ -609,7 +701,7 @@ class NFWModel(object):
                  /(1.-self.kappa_theory(r, M, c, z_lens, z_source, skip_reformat=True)))
 
     @reshape
-    def deltasigma(self, r, M, c, r_mis):
+    def deltasigma(self, r, M, c, z, r_mis=0, P_cen=0):
         """Return an optionally miscentered NFW delta sigma from an internal interpolation table.
         
         Parameters
@@ -634,7 +726,7 @@ class NFWModel(object):
             center of the halo.  Whatever definition (comoving/not, etc) you used for your cosmology
             object should be replicated here.  This can be an object with astropy units of length;
             if not it is assumed to be in Mpc/h.  If this is an iterable, all other non-r parameters
-            must be either iterables with the same length or floats.
+            must be either iterables with the same length or floats. [default: 0]
         
         Returns
         -------
@@ -649,7 +741,7 @@ class NFWModel(object):
         raise NotImplementedError("NFWModel currently can't do delta sigmas!")
 
     @reshape
-    def sigma(self, r, M, c, r_mis):
+    def sigma(self, r, M, c, z, r_mis=0, P_cen=0):
         """Return an optionally miscentered NFW sigma from an internal interpolation table.
         
         Parameters
@@ -689,7 +781,7 @@ class NFWModel(object):
         raise NotImplementedError("NFWModel currently can't do sigmas!")
 
     @reshape
-    def Upsilon(self, r, M, c, r0, r_mis):
+    def Upsilon(self, r, M, c, z, r0, r_mis=0, P_cen=0):
         """Return an optionally miscentered NFW Upsilon statistic from an internal interpolation table.
         
         For details of the Upsilon statistic, see the documentation for :func:`Upsilon_theory`.
@@ -731,7 +823,7 @@ class NFWModel(object):
         raise NotImplementedError("NFWModel currently can't do upsilon statistics!")
 
     @reshape_multisource
-    def gamma(self, r, M, c, r_mis, z_lens, z_source, z_source_pdf=None):
+    def gamma(self, r, M, c, z_lens, z_source, r_mis=0, P_cen=0, z_source_pdf=None):
         """Return an optionally miscentered NFW tangential shear from an internal interpolation
         table.
         
@@ -772,7 +864,7 @@ class NFWModel(object):
         raise NotImplementedError("NFWModel currently can't do tangential shear!")
 
     @reshape_multisource
-    def kappa(self, r, M, c, r_mis, z_lens, z_source, z_source_pdf=None):
+    def kappa(self, r, M, c, z_lens, z_source, r_mis=0, P_cen=0, z_source_pdf=None):
         """Return an optionally miscentered NFW convergence from an internal interpolation table.
         
         Parameters
@@ -812,7 +904,7 @@ class NFWModel(object):
         raise NotImplementedError("NFWModel currently can't do convergence!")
 
     @reshape_multisource       
-    def g(self, r, M, c, r_mis, z_lens, z_source, z_source_pdf=None):
+    def g(self, r, M, c, z_lens, z_source, r_mis=0, P_cen=0, z_source_pdf=None):
         """Return an optionally miscentered NFW reduced shear from an internal interpolation table.
         
         Parameters
@@ -852,7 +944,7 @@ class NFWModel(object):
         raise NotImplementedError("NFWModel currently can't do reduced shear!")
 
     @reshape
-    def deltasigma_Rayleigh(self, r, M, c, r_mis, P_cen):
+    def deltasigma_Rayleigh(self, r, M, c, z, r_mis=0, P_cen=0):
         """Return an NFW delta sigma from an internal interpolation table, assuming that the
         miscentering takes the form of a Rayleigh (2d Gaussian) distribution plus a delta function:
         fraction `0<P_cen<1` of the halos have correct centers, while the ones which are miscentered
@@ -896,7 +988,7 @@ class NFWModel(object):
                 "distributions!")
 
     @reshape
-    def sigma_Rayleigh(self, r, M, c, r_mis, P_cen):
+    def sigma_Rayleigh(self, r, M, c, z, r_mis=0, P_cen=0):
         """Return an NFW sigma from an internal interpolation table, assuming that the
         miscentering takes the form of a Rayleigh (2d Gaussian) distribution plus a delta function:
         fraction `0<P_cen<1` of the halos have correct centers, while the ones which are miscentered
@@ -939,7 +1031,7 @@ class NFWModel(object):
         raise NotImplementedError("NFWModel currently can't do sigmas with Rayleigh distributions!")
 
     @reshape
-    def Upsilon_Rayleigh(self, r, M, c, r0, r_mis, P_cen):
+    def Upsilon_Rayleigh(self, r, M, c, z, r0, r_mis=0, P_cen=0):
         """Return an NFW Upsilon statistic from an internal interpolation table, assuming that the
         miscentering takes the form of a Rayleigh (2d Gaussian) distribution plus a delta function:
         fraction `0<P_cen<1` of the halos have correct centers, while the ones which are miscentered
@@ -985,7 +1077,7 @@ class NFWModel(object):
                 "distributions!")
 
     @reshape_multisource
-    def gamma_Rayleigh(self, r, M, c, r_mis, P_cen, z_lens, z_source, z_source_pdf=None):
+    def gamma_Rayleigh(self, r, M, c, z_lens, z_source, r_mis=0, P_cen=0, z_source_pdf=None):
         """Return an NFW tangential shear from an internal interpolation table, assuming that the
         miscentering takes the form of a Rayleigh (2d Gaussian) distribution plus a delta function:
         fraction `0<P_cen<1` of the halos have correct centers, while the ones which are miscentered
@@ -1029,7 +1121,7 @@ class NFWModel(object):
                 "distributions!")
 
     @reshape_multisource    
-    def kappa_Rayleigh(self, r, M, c, r_mis, P_cen, z_lens, z_source, z_source_pdf=None):
+    def kappa_Rayleigh(self, r, M, c, z_lens, z_source, r_mis=0, P_cen=0, z_source_pdf=None):
         """Return an NFW convergence from an internal interpolation table, assuming that the
         miscentering takes the form of a Rayleigh (2d Gaussian) distribution plus a delta function:
         fraction `0<P_cen<1` of the halos have correct centers, while the ones which are miscentered
@@ -1073,7 +1165,7 @@ class NFWModel(object):
                 "distributions!")
     
     @reshape_multisource
-    def g_Rayleigh(self, r, M, c, r_mis, P_cen, z_lens, z_source, z_source_pdf=None):
+    def g_Rayleigh(self, r, M, c, z_lens, z_source, r_mis=0, P_cen=0, z_source_pdf=None):
         """Return an NFW reduced shear from an internal interpolation table, assuming that the
         miscentering takes the form of a Rayleigh (2d Gaussian) distribution plus a delta function:
         fraction `0<P_cen<1` of the halos have correct centers, while the ones which are miscentered
