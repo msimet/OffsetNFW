@@ -41,7 +41,8 @@ def _form_iterables(*args):
 def _form_iterables_multisource(nargs, z_indx, *args):
     """ Make input arrays broadcastable in the way we want, in the case where we have source 
     redshifts to contend with.  Argument nargs is the number of args passed to func; this is 
-    assumed to INCLUDE a self argument that won't get passed to this decorator."""
+    assumed to INCLUDE a self argument that won't get passed to this decorator.  Argument z_indx
+    is the index of the z_source argument in *args."""
     original_args = args
     z_source = args[z_indx]
     args = args[:z_indx]+args[z_indx+1:]
