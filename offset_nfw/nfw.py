@@ -8,55 +8,82 @@ try:
 except ImportError:
     use_multiprocessing = False
 from functools import partial
-
 import astropy.units as u
 
+from memory_profiler import profile
+import time
+t0 = time.time()
+
+def tupdate(s):
+    t = time.time()-t0
+    if t<60:
+        print "%.1f seconds have elapsed at point %s"%(t,s)
+    elif t<60*60:
+        print "%.2f minutes have elapsed at point %s"%(t/60.,s)
+    else:
+        print "%i hours and %.2f minutes have elapsed %s"%(int(t/3600), t/60., s)
+    
 
 
 class NFWModel(object):
-    """
-    A class that generates offset NFW halo profiles.  The basic purpose of this class is to generate
-    internal interpolation tables for the common NFW lensing quantities, but it includes direct
-    computation of the non-miscentered versions for completeness.
+    r"""
+    A class that generates offset (miscentered) NFW halo profiles.  The basic purpose of this class
+    is to generate internal interpolation tables for fast computation of the common NFW lensing 
+    quantities, but it includes direct computation of the non-miscentered versions for completeness.
     
-    Initializing a class is easy.  You do need a cosmology object like those created by astropy,
+    Initializing a class is easy.  You need a cosmology object like those created by astropy,
     since we need to know overdensities.  Once you have one:
     >>>  from offset_nfw import NFWModel
     >>>  nfw_model = NFWModel(cosmology)
     
     However, this won't have any internal interpolation tables (unless you've already created them
-    in the directory you're working in).  To do that, you pass:
-    >>>  nfw_model = NFWModel(generate=True)
-    If you want to use tables you generated in another directory, that's easy:
-    >>>  nfw_model = NFWModel(dir='nfw_tables')
-    Note that setting ``generate=True`` will only generate new internal interpolation tables `if
-    those tables do not already exist`.  If you want to `re`generate a table, you should delete
-    the table files. They all start `.saved_nfw*` and use the extension `.npy`.
+    in the directory you're working in).  To do that, you should use the class method 
+    :ref:`generate``:
+    >>>  nfw_model.generate()
+    If you want to use tables you generated in another directory, simply pass the directory name:
+    >>>  nfw_model = NFWModel(cosmology, dir='nfw_tables')
     
     Parameters
     ----------
     cosmology : astropy.cosmology instance
-        A cosmology object that can return distances and densities for computing sigma crit and
-        rho_m or rho_c.  (Technically, this doesn't have to be an astropy.cosmology instance if it
-        has the methods ``angular_diameter_distance``, ``angular_diameter_distance_z1z2``, and 
-        ``efunc`` (=H(z)/H0)), plus the attributes ``critical_density0`` and ``Om0``,
+        A cosmology object that can return distances and densities for computing $\Sigma\Crit$ and
+        $\rho_m$ or $\rho_c$.
     dir : str
         The directory where the saved tables should be stored (will be interpreted through
         ``os.path``). [default: '.']
     rho : str
-        Which type of overdensity to use for the halo, 'rho_m' or 'rho_c'. [default: 'rho_m']
+        Which type of overdensity to use for the halo, `'rho_m'` or `'rho_c'`.  These correspond to
+        measuring the overdensity relative to the matter density ($\rho_m$) or the critical density
+        ($\rho_c$). [default: 'rho_m']
     comoving: bool
         Use comoving coordinates (True) or physical coordinates (False). [default: True]
     delta : float
-        The overdensity at which the halo mass is defined [default: 200]
+        The overdensity at which the halo mass is defined. [default: 200]
     precision : float
-        The maximum allowable fractional error, defined for some mass range and concentration TBD
+        The maximum allowable fractional error for a $10^14$ solar mass halo with concentration c=4
+        in comoving coordinates relative to $rho_m$ for $r/r_s$ in the range [0.03, 10].  More
+        details on how this precision is calculated and how it changes with mass, concentration, and
+        radius can be found in the documents in the `validation/` folder. [default: 0.001]
     x_range : tuple
         The min-max range of x (=r/r_s) for the interpolation table. Precision is not guaranteed for 
-        values other than the default.  [default: (0.0003, 300)]
+        values other than the default.  [default: (0.0003, 10)]
+    table_slug : str
+        An extra string to insert into the filenames for the saved interpolation files. This can be
+        used to generate multiple tables in the same directory. By default, the filenames already
+        include the precision and the x_range. [default: ""]
+    deltasigma : bool
+        Load tables for computing $\Delta\Sigma$ and related quantities ($\gamma$, $\Upsilon$).
+        The kwargs `deltasigma`, `sigma`, `rayleigh`, and `exponential` are ignored if no tables
+        have been generated. [default: True]
+    sigma : bool
+        Load tables for computing $\Sigma$ and related quantities ($\kappa$). [default: True]
+    rayleigh : bool
+        Load tables for integrating over a Rayleigh miscentering distribution. [default: True]
+    exponential : bool
+        Load tables for integrating over an exponential miscentering distribution. [default: True]
     """
     def __init__(self, cosmology, dir='.', rho='rho_m', comoving=True, delta=200,
-                       precision=0.01, x_range=(0.0003, 300), table_slug="", 
+                       precision=0.01, x_range=(0.0003, 10), table_slug="", 
                        deltasigma=True, sigma=True, 
                        rayleigh=True, exponential=True):
 
@@ -127,88 +154,129 @@ class NFWModel(object):
             from functools import partial
             from .cosmology import sigma_crit_inverse
             self.sigma_crit_inverse = partial(sigma_crit_inverse, self.cosmology)
-        
+        self.do_sigma = sigma
+        self.do_deltasigma = deltasigma
+        self.do_rayleigh = rayleigh
+        self.do_exponential = exponential
         self._loadTables(sigma, deltasigma, rayleigh, exponential)
 
-    def generate(self, sigma=True, deltasigma=True, rayleigh=True, exponential=True, save=True):
+    def generate(self, sigma=None, deltasigma=None, rayleigh=None, exponential=None, save=True):
+        """
+        Generate internal interpolation tables using the settings specified when the NFWModel
+        instance was created.  Note that this method does **not** check for existing tables before
+        writing over them.
+        
+        Parameters
+        ----------
+        deltasigma : bool
+            Generate tables for computing $\Delta\Sigma$ and related quantities ($\gamma$, 
+            $\Upsilon$). [default: True]
+        sigma : bool
+            Generate tables for computing $\Sigma$ and related quantities ($\kappa$). 
+            [default: True]
+        rayleigh : bool
+            Generate tables for integrating over a Rayleigh miscentering distribution. 
+            [default: True]
+        exponential : bool
+            Generate tables for integrating over an exponential miscentering distribution. 
+            [default: True]
+        save : bool
+            Save the tables after they are generated. If False, the tables can be used for the
+            current Python session, but they will be deleted as soon as the NFWModel object is 
+            deleted or garbage-collected. [default: True]
+        """
+        if sigma is None:
+            sigma = self.sigma
+        tupdate("before tables")
         self._buildTables()
+        tupdate("before rayleigh")
         if rayleigh:
             self._buildRayleighProbabilities(save=save)
+        tupdate("before exponential")
         if exponential:
             self._buildExponentialProbabilities(save=save)
         if sigma or deltasigma:
+            tupdate("before build sigma")
             self._buildSigma(save=save)
             self._setupSigma()
+            tupdate("before build miscentered sigma")
             self._buildMiscenteredSigma(save=save)
             if rayleigh:
+                tupdate("before build rayleigh sigma")
                 self._buildRayleighSigma(save=save)
             if exponential:
+                tupdate("before build exponential sigma")
                 self._buildExponentialSigma(save=save)
-            if sigma:
-                self._setupMiscenteredSigma()
-                if rayleigh:
-                    self._setupRayleighSigma()
-                if exponential:
-                    self._setupExponentialSigma()
         if deltasigma:
+            tupdate("before build deltasigma")
             self._buildDeltaSigma(save=save)
-            self._setupDeltaSigma()
+            tupdate("before build miscentered deltasigma")
             self._buildMiscenteredDeltaSigma(save=save)
-            self._setupMiscenteredDeltaSigma()
             if rayleigh:
+                tupdate("before build rayleigh deltasigma")
                 self._buildRayleighDeltaSigma(save=save)
-                self._setupRayleighDeltaSigma()
             if exponential:
+                tupdate("before build exponential deltasigma")
                 self._buildExponentialDeltaSigma(save=save)
-                self._setupExponentialDeltaSigma()
+        tupdate("finished")
+        self._loadTables(sigma=sigma, deltasigma=deltasigma, 
+                         rayleigh=rayleigh, exponential=exponential)
 
     def _loadTables(self, sigma=False, deltasigma=False, 
                           rayleigh=False, exponential=False):
         self._buildTables()
         if sigma:
             try:
-                self._sigma = numpy.load(self.table_file_root+'_sigma.npy')
+                if not hasattr(self, '_sigma'):
+                    self._sigma = numpy.load(self.table_file_root+'_sigma.npy')
                 self._setupSigma()
             except IOError:
                 pass
             try:
-                self._miscentered_sigma = numpy.load(self.table_file_root+'_miscentered_sigma.npy')
+                if not hasattr(self, '_miscentered_sigma'):
+                    self._miscentered_sigma = numpy.load(self.table_file_root+'_miscentered_sigma.npy')
                 self._setupMiscenteredSigma()
             except IOError:
                 pass
             
             if rayleigh:
                 try:
-                    self._rayleigh_sigma = numpy.load(self.table_file_root+'_rayleigh_sigma.npy')
+                    if not hasattr(self, '_rayleigh_sigma'):
+                        self._rayleigh_sigma = numpy.load(self.table_file_root+'_rayleigh_sigma.npy')
                     self._setupRayleighSigma()
                 except IOError:
                     pass
             if exponential:
                 try:
-                    self._exponential_sigma = numpy.load(self.table_file_root+'_exponential_sigma.npy')
+                    if not hasattr(self, '_exponential_sigma'):
+                        self._exponential_sigma = numpy.load(self.table_file_root+'_exponential_sigma.npy')
                     self._setupExponentialSigma()
                 except IOError:
                     pass
         if deltasigma:
             try:
-                self._deltasigma = numpy.load(self.table_file_root+'_deltasigma.npy')
+                if not hasattr(self, '_deltasigma'):
+                    self._deltasigma = numpy.load(self.table_file_root+'_deltasigma.npy')
                 self._setupDeltaSigma()
             except IOError:
                 pass
             try:
-                self._miscentered_deltasigma = numpy.load(self.table_file_root+'_miscentered_deltasigma.npy')
+                if not hasattr(self, '_miscentered_deltasigma'):
+                    self._miscentered_deltasigma = numpy.load(self.table_file_root+'_miscentered_deltasigma.npy')
                 self._setupMiscenteredDeltaSigma()
             except IOError:
                 pass
             if rayleigh:
                 try:
-                    self._rayleigh_deltasigma = numpy.load(self.table_file_root+'_rayleigh_deltasigma.npy')
+                    if not hasattr(self, '_rayleigh_deltasigma'):
+                        self._rayleigh_deltasigma = numpy.load(self.table_file_root+'_rayleigh_deltasigma.npy')
                     self._setupRayleighDeltaSigma()
                 except IOError:
                     pass
             if exponential:
                 try:
-                    self._exponential_deltasigma = numpy.load(self.table_file_root+'_exponential_deltasigma.npy')
+                    if not hasattr(self, '_exponential_deltasigma'):
+                        self._exponential_deltasigma = numpy.load(self.table_file_root+'_exponential_deltasigma.npy')
                     self._setupExponentialDeltaSigma()
                 except IOError:
                     pass
@@ -216,7 +284,7 @@ class NFWModel(object):
 
     def _buildTables(self):
         self.table_x = numpy.logspace(numpy.log10(self.x_range[0]), numpy.log10(self.x_range[1]), 
-                                      num=int(50./self.precision))
+                                      num=max(2,int(50.*numpy.log(self.x_range[1]/self.x_range[0])/numpy.log(300/0.0003)/self.precision)))
         self.x_min = numpy.min(self.table_x)
         self.x_max = numpy.max(self.table_x)
         self.dx = numpy.log(self.table_x[1]/self.table_x[0])*self.table_x
@@ -240,6 +308,8 @@ class NFWModel(object):
                                                        fill_value=0, bounds_error=False)
 
     def _buildMiscenteredSigma(self, save=True):
+        npts = len(self.table_x)
+        self._miscentered_sigma = numpy.zeros((npts, npts))
         self._miscentered_sigma = numpy.array([numpy.sum(
             self.dtheta*self._sigma_table(
                 0.5*numpy.log(
@@ -284,7 +354,7 @@ class NFWModel(object):
         # This accounts for the fact that we don't go from x=0 to infinity.
         # Comment out this line to check accuracy (tends to be off by ~5% for typical precision and
         # xrange, but note that the missing weights are multiplying things at large radii where the
-        # signal is small.
+        # signal is small).
         # self._rayleigh_orig stores the original sum for cross-checks.
         self._rayleigh_orig = numpy.sum(self._rayleigh_p, axis=1)[:, numpy.newaxis]
         self._rayleigh_p /= self._rayleigh_orig
@@ -299,7 +369,7 @@ class NFWModel(object):
         # This accounts for the fact that we don't go from x=0 to infinity.
         # Comment out this line to check accuracy (tends to be off by ~5% for typical precision and
         # xrange, but note that the missing weights are multiplying things at large radii where the
-        # signal is small.
+        # signal is small).
         # self._exponential_orig stores the original sum for cross-checks.
         self._exponential_orig = numpy.sum(self._exponential_p, axis=1)[:, numpy.newaxis]
         self._exponential_p /= self._exponential_orig
@@ -308,9 +378,11 @@ class NFWModel(object):
             numpy.save(self.table_file_root+'_exponential_orig.npy', self._exponential_orig)
 
     def _buildRayleighSigma(self, save=True):
-        self._rayleigh_sigma = numpy.sum(self._rayleigh_p[:, numpy.newaxis]*self._miscentered_sigma, axis=2)
+        self._rayleigh_sigma = self._rayleigh_p[:, numpy.newaxis]*self._miscentered_sigma
+        self._rayleigh_sigma = numpy.sum(self._rayleigh_sigma, axis=2)
         if save:
             numpy.save(self.table_file_root+'_rayleigh_sigma.npy', self._rayleigh_sigma)
+
     def _setupRayleighSigma(self):
         self._rayleigh_sigma_table = scipy.interpolate.RegularGridInterpolator((numpy.log(self.table_x), numpy.log(self.table_x)), self._rayleigh_sigma)
 
@@ -318,6 +390,7 @@ class NFWModel(object):
         self._rayleigh_deltasigma = numpy.array([self.sigma_to_deltasigma(self.table_x, rs) for rs in self._rayleigh_sigma])
         if save:
             numpy.save(self.table_file_root+'_rayleigh_deltasigma.npy', self._rayleigh_deltasigma)
+
     def _setupRayleighDeltaSigma(self):
         self._rayleigh_deltasigma_table = scipy.interpolate.RegularGridInterpolator((numpy.log(self.table_x), numpy.log(self.table_x)), self._rayleigh_deltasigma)
 
@@ -325,6 +398,7 @@ class NFWModel(object):
         self._exponential_sigma = numpy.sum(self._exponential_p[:, numpy.newaxis]*self._miscentered_sigma, axis=2)
         if save:
             numpy.save(self.table_file_root+'_exponential_sigma.npy', self._exponential_sigma)
+
     def _setupExponentialSigma(self):
         self._exponential_sigma_table = scipy.interpolate.RegularGridInterpolator((numpy.log(self.table_x), numpy.log(self.table_x)), self._exponential_sigma)
 
@@ -332,6 +406,7 @@ class NFWModel(object):
         self._exponential_deltasigma = numpy.array([self.sigma_to_deltasigma(self.table_x, es) for es in self._exponential_sigma])
         if save:
             numpy.save(self.table_file_root+'_exponential_deltasigma.npy', self._exponential_deltasigma)
+
     def _setupExponentialDeltaSigma(self):
         self._exponential_deltasigma_table = scipy.interpolate.RegularGridInterpolator((numpy.log(self.table_x), numpy.log(self.table_x)), self._exponential_deltasigma)
         
@@ -358,9 +433,33 @@ class NFWModel(object):
         return ''
         
     def sigma_to_deltasigma(self, r, sigma):
-        """central_value is default 0; central_value = [something floating-point] will be used; 
-        central_value = 'interp' will use the innermost value of sigma.  central_value must have same
-        units as sigma, if given explicitly."""
+        """ Take a `sigma` profile sampled at `r` and compute $\Delta\Sigma$ numerically.  This
+        integrates `sigma` using the scipy algorithm `scipy.integrate.cumtrapz` but makes no special
+        corrections for incompleteness or numerical artifacts, except at the innermost radial point.
+        That point is given as 2*deltasigma[1]-deltasigma[2], a linear extrapolation.  If good
+        accuracy is required at the minimum `r` location, we suggest generating `sigma` values at
+        significantly smaller `r` (by at least an order of magnitude) in order to avoid numerical
+        effects at the small-radius limit.
+        
+        This method has been tested for logarithmic spacing in `r` only.  Linear spacing, while
+        it will not break the computation, will likely result in significant errors at small r.
+        
+        Parameters
+        ----------
+        r : array-like
+            An array of radial points at which `sigma` is sampled.  Must be one-dimensional.
+        sigma : array-like
+            An array of $\Sigma$ values sampled at `r`.  Sigma can be multidimensional if you would
+            like to generate multiple delta sigmas at once; the requirement is that `sigma` and `r`
+            should have shapes that broadcast together (so the _final_ dimension of sigma, 
+            `sigma.shape[-1]`, should be equal to `len(r)`).  
+            
+        Returns
+        -------
+        deltasigma : array-like
+            The numerically-computed $\Delta\Sigma$ values based on the inputs `r` and `sigma`.
+            The shape of the output array will be the same as the shape of `sigma`.
+        """
         if hasattr(r, 'unit'):
             r_unit = r.unit
             r = r.value
@@ -378,10 +477,16 @@ class NFWModel(object):
         # Linearly interpolate central value, which is nan due to sum_area==0
         if len(deltasigma.shape)==1:
             deltasigma[1:] = sum_sigma[1:]/sum_area[1:] - sigma[1:]*sigma_unit        
-            deltasigma[0] = 2*deltasigma[1]-deltasigma[2]
+            if len(deltasigma)>2:
+                deltasigma[0] = 2*deltasigma[1]-deltasigma[2]
+            else:
+                deltasigma[0] = 0            
         else:
             deltasigma[:,1:] = sum_sigma[:,1:]/sum_area[1:] - sigma[:,1:]*sigma_unit        
-            deltasigma[:,0] = 2*deltasigma[:,1]-deltasigma[:,2]
+            if len(deltasigma[0])>2:
+                deltasigma[:,0] = 2*deltasigma[:,1]-deltasigma[:,2]
+            else:
+                deltasigma[:,0] = 0            
         return deltasigma
         
     def reference_density(self, z):
