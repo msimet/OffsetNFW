@@ -10,6 +10,7 @@ except ImportError:
 from functools import partial
 
 import astropy.units as u
+import gc
 
 
 
@@ -53,10 +54,10 @@ class NFWModel(object):
         The maximum allowable fractional error, defined for some mass range and concentration TBD
     x_range : tuple
         The min-max range of x (=r/r_s) for the interpolation table. Precision is not guaranteed for 
-        values other than the default.  [default: (0.0003, 300)]
+        values other than the default.  [default: (0.0003, 30)]
     """
     def __init__(self, cosmology, dir='.', rho='rho_m', comoving=True, delta=200,
-                       precision=0.01, x_range=(0.0003, 300), table_slug="", 
+                       precision=0.01, x_range=(0.0003, 30), table_slug="", 
                        deltasigma=True, sigma=True, 
                        rayleigh=True, exponential=True):
 
@@ -130,8 +131,8 @@ class NFWModel(object):
         
         self._loadTables(sigma, deltasigma, rayleigh, exponential)
 
-    def generate(self, sigma=True, deltasigma=True, rayleigh=True, exponential=True, save=True):
-        self._buildTables()
+    def generate(self, sigma=True, deltasigma=True, rayleigh=True, exponential=True, save=True, nxbins=None, nthetabins=None):
+        self._buildTables(nxbins, nthetabins)
         if rayleigh:
             self._buildRayleighProbabilities(save=save)
         if exponential:
@@ -214,13 +215,17 @@ class NFWModel(object):
                     pass
             
 
-    def _buildTables(self):
+    def _buildTables(self, nxbins=None, nthetabins=None):
+        if nxbins is None:
+            nxbins = int(25./self.precision)
+        if nthetabins is None:
+            nthetabins = int(2.*numpy.pi/self.precision)
         self.table_x = numpy.logspace(numpy.log10(self.x_range[0]), numpy.log10(self.x_range[1]), 
-                                      num=int(50./self.precision))
+                                      num=nxbins)
         self.x_min = numpy.min(self.table_x)
         self.x_max = numpy.max(self.table_x)
         self.dx = numpy.log(self.table_x[1]/self.table_x[0])*self.table_x
-        table_angle = numpy.linspace(0, 2.*numpy.pi, int(2.*numpy.pi/self.precision), endpoint=False)
+        table_angle = numpy.linspace(0, 2.*numpy.pi, nthetabins, endpoint=False)
         self.cos_theta_table = numpy.cos(table_angle)[:, numpy.newaxis]
         self.dtheta = table_angle[1]-table_angle[0]
 
@@ -240,11 +245,14 @@ class NFWModel(object):
                                                        fill_value=0, bounds_error=False)
 
     def _buildMiscenteredSigma(self, save=True):
-        self._miscentered_sigma = numpy.array([numpy.sum(
-            self.dtheta*self._sigma_table(
-                0.5*numpy.log(
-                    self.table_x*self.table_x+tx*tx
-                        +2*self.table_x*self.cos_theta_table*tx)),axis=0) for tx in self.table_x])/(2.*numpy.pi)
+        self._miscentered_sigma = numpy.zeros((len(self.table_x), len(self.table_x)))
+        for i, tx in enumerate(self.table_x):
+            gc.collect()
+            self._miscentered_sigma[i] = numpy.sum(
+                self.dtheta*self._sigma_table(
+                    0.5*numpy.log(
+                        self.table_x*self.table_x+tx*tx
+                            +2*self.table_x*self.cos_theta_table*tx)), axis=0)/(2.*numpy.pi)
         if save:
             numpy.save(self.table_file_root+'_miscentered_sigma.npy', self._miscentered_sigma)
         # TODO: figure out if you need to trim egregious problems        
