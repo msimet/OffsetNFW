@@ -683,6 +683,9 @@ class NFWModel(object):
             this is an iterable, all other non-r parameters must be either iterables with the same
             length or floats. This can be an object with astropy units of mass; if not it is assumed
             to be in h Msun.
+        z : float or iterable
+            The redshift of the lens.  If this is an iterable, all other non-r parameters must be
+            either iterables with the same length or floats.
         c : float or iterable
             The concentration of the halo at the overdensity definition given at class 
             initialization.  If this is an iterable, all other non-r parameters must be either
