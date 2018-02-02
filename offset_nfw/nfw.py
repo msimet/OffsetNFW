@@ -83,7 +83,7 @@ class NFWModel(object):
         Load tables for integrating over an exponential miscentering distribution. [default: True]
     """
     def __init__(self, cosmology, dir='.', rho='rho_m', comoving=True, delta=200,
-                       precision=0.01, x_range=(0.0003, 10), table_slug="", 
+                       precision=0.01, x_range=(0.0003, 10), table_slug="", bigmem=False,
                        deltasigma=True, sigma=True, 
                        rayleigh=True, exponential=True):
 
@@ -144,6 +144,7 @@ class NFWModel(object):
             self.table_file_root = self.table_file_root+'_'+table_slug
         self.table_file_root = self.table_file_root+'precision_%.03f_xrange_%.4f_%.1f'%(
                                                                 precision, x_range[0], x_range[1])
+        self.bigmem = bigmem # switch setting fast table generation/big memory vs slow/smaller
         
         # Useful quantity in scaling profiles
         self._rmod = (3./(4.*numpy.pi)/self.delta)**0.33333333
@@ -160,7 +161,8 @@ class NFWModel(object):
         self.do_exponential = exponential
         self._loadTables(sigma, deltasigma, rayleigh, exponential)
 
-    def generate(self, sigma=None, deltasigma=None, rayleigh=None, exponential=None, save=True):
+    def generate(self, sigma=None, deltasigma=None, rayleigh=None, exponential=None, save=True,
+                       force=False):
         """
         Generate internal interpolation tables using the settings specified when the NFWModel
         instance was created.  Note that this method does **not** check for existing tables before
@@ -191,33 +193,33 @@ class NFWModel(object):
         self._buildTables()
         tupdate("before rayleigh")
         if rayleigh:
-            self._buildRayleighProbabilities(save=save)
+            self._buildRayleighProbabilities(save=save, force=force)
         tupdate("before exponential")
         if exponential:
-            self._buildExponentialProbabilities(save=save)
+            self._buildExponentialProbabilities(save=save, force=force)
         if sigma or deltasigma:
             tupdate("before build sigma")
-            self._buildSigma(save=save)
+            self._buildSigma(save=save, force=force)
             self._setupSigma()
             tupdate("before build miscentered sigma")
-            self._buildMiscenteredSigma(save=save)
+            self._buildMiscenteredSigma(save=save, force=force)
             if rayleigh:
                 tupdate("before build rayleigh sigma")
-                self._buildRayleighSigma(save=save)
+                self._buildRayleighSigma(save=save, force=force)
             if exponential:
                 tupdate("before build exponential sigma")
-                self._buildExponentialSigma(save=save)
+                self._buildExponentialSigma(save=save, force=force)
         if deltasigma:
             tupdate("before build deltasigma")
-            self._buildDeltaSigma(save=save)
+            self._buildDeltaSigma(save=save, force=force)
             tupdate("before build miscentered deltasigma")
-            self._buildMiscenteredDeltaSigma(save=save)
+            self._buildMiscenteredDeltaSigma(save=save, force=force)
             if rayleigh:
                 tupdate("before build rayleigh deltasigma")
-                self._buildRayleighDeltaSigma(save=save)
+                self._buildRayleighDeltaSigma(save=save, force=force)
             if exponential:
                 tupdate("before build exponential deltasigma")
-                self._buildExponentialDeltaSigma(save=save)
+                self._buildExponentialDeltaSigma(save=save, force=force)
         tupdate("finished")
         self._loadTables(sigma=sigma, deltasigma=deltasigma, 
                          rayleigh=rayleigh, exponential=exponential)
@@ -292,31 +294,44 @@ class NFWModel(object):
         self.cos_theta_table = numpy.cos(table_angle)[:, numpy.newaxis]
         self.dtheta = table_angle[1]-table_angle[0]
 
-    def _buildSigma(self, save=True):
-        self._sigma = numpy.zeros_like(self.table_x)
-        xm = self.table_x<1
-        self._sigma[xm] = self._sigmalt(self.table_x[xm])
-        xm = self.table_x==1
-        self._sigma[xm] = self._sigmaeq(self.table_x[xm])
-        xm = self.table_x>1
-        self._sigma[xm] = self._sigmagt(self.table_x[xm])
-        if save:
-            numpy.save(self.table_file_root+'_sigma.npy', self._sigma)
+    def _buildSigma(self, save=True, force=False):
+        if (not force) and os.path.isfile(self.table_file_root+'_sigma.npy'):
+            self._sigma = np.load(self.table_file_root+'_sigma.npy', self._sigma)
+        else:
+            self._sigma = numpy.zeros_like(self.table_x)
+            xm = self.table_x<1
+            self._sigma[xm] = self._sigmalt(self.table_x[xm])
+            xm = self.table_x==1
+            self._sigma[xm] = self._sigmaeq(self.table_x[xm])
+            xm = self.table_x>1
+            self._sigma[xm] = self._sigmagt(self.table_x[xm])
+            if save:
+                numpy.save(self.table_file_root+'_sigma.npy', self._sigma)
 
     def _setupSigma(self):
         self._sigma_table = scipy.interpolate.interp1d(numpy.log(self.table_x), self._sigma,
                                                        fill_value=0, bounds_error=False)
 
     def _buildMiscenteredSigma(self, save=True):
-        npts = len(self.table_x)
-        self._miscentered_sigma = numpy.zeros((npts, npts))
-        self._miscentered_sigma = numpy.array([numpy.sum(
-            self.dtheta*self._sigma_table(
-                0.5*numpy.log(
-                    self.table_x*self.table_x+tx*tx
-                        +2*self.table_x*self.cos_theta_table*tx)),axis=0) for tx in self.table_x])/(2.*numpy.pi)
-        if save:
-            numpy.save(self.table_file_root+'_miscentered_sigma.npy', self._miscentered_sigma)
+        if (not force) and os.path.isfile(self.table_file_root+'_miscentered_sigma.npy'):
+            self._miscentered_sigma = np.load(self.table_file_root+'_miscentered_sigma.npy')
+        else:
+            if bigmem:
+                self._miscentered_sigma = numpy.array([numpy.sum(
+                    self.dtheta*self._sigma_table(
+                        0.5*numpy.log(
+                            self.table_x*self.table_x+tx*tx
+                                +2*self.table_x*self.cos_theta_table*tx)),axis=0) for tx in self.table_x])/(2.*numpy.pi)
+            else:
+                npts = len(self.table_x)
+                self._miscentered_sigma = numpy.zeros((npts, npts))
+                self._miscentered_sigma = numpy.array([numpy.sum(
+                    self.dtheta*self._sigma_table(
+                        0.5*numpy.log(
+                            self.table_x*self.table_x+tx*tx
+                                +2*self.table_x*self.cos_theta_table*tx)),axis=0) for tx in self.table_x])/(2.*numpy.pi)
+            if save:
+                numpy.save(self.table_file_root+'_miscentered_sigma.npy', self._miscentered_sigma)
         # TODO: figure out if you need to trim egregious problems        
 
     def _setupMiscenteredSigma(self):
@@ -324,24 +339,30 @@ class NFWModel(object):
             (numpy.log(self.table_x), numpy.log(self.table_x)), self._miscentered_sigma)
 
     def _buildDeltaSigma(self, save=True):
-        self._deltasigma = numpy.zeros_like(self.table_x)
-        xm = self.table_x<1
-        self._deltasigma[xm] = self._deltasigmalt(self.table_x[xm])
-        xm = self.table_x==1
-        self._deltasigma[xm] = self._deltasigmaeq(self.table_x[xm])
-        xm = self.table_x>1
-        self._deltasigma[xm] = self._deltasigmagt(self.table_x[xm])
-        if save:
-            numpy.save(self.table_file_root+'_deltasigma.npy', self._deltasigma)
+        if (not force) and os.path.isfile(self.table_file_root+'_deltasigma.npy'):
+            self._deltasigma = np.load(self.table_file_root+'_deltasigma.npy')
+        else:
+            self._deltasigma = numpy.zeros_like(self.table_x)
+            xm = self.table_x<1
+            self._deltasigma[xm] = self._deltasigmalt(self.table_x[xm])
+            xm = self.table_x==1
+            self._deltasigma[xm] = self._deltasigmaeq(self.table_x[xm])
+            xm = self.table_x>1
+            self._deltasigma[xm] = self._deltasigmagt(self.table_x[xm])
+            if save:
+                numpy.save(self.table_file_root+'_deltasigma.npy', self._deltasigma)
 
     def _setupDeltaSigma(self):
         self._deltasigma_table = scipy.interpolate.interp1d(numpy.log(self.table_x), self._deltasigma,
                                                        fill_value=0, bounds_error=False)
 
     def _buildMiscenteredDeltaSigma(self, save=True):
-        self._miscentered_deltasigma = numpy.array([self.sigma_to_deltasigma(self.table_x, ms) for ms in self._miscentered_sigma])
-        if save:
-            numpy.save(self.table_file_root+'_miscentered_deltasigma.npy', self._miscentered_deltasigma)
+        if (not force) and os.path.isfile(self.table_file_root+'_miscentered_deltasigma.npy'):
+            self._miscentered_deltasigma = np.load(self.table_file_root+'_miscentered_deltasigma.npy')
+        else:
+            self._miscentered_deltasigma = numpy.array([self.sigma_to_deltasigma(self.table_x, ms) for ms in self._miscentered_sigma])
+            if save:
+                numpy.save(self.table_file_root+'_miscentered_deltasigma.npy', self._miscentered_deltasigma)
 
     def _setupMiscenteredDeltaSigma(self):
         self._miscentered_deltasigma_table = scipy.interpolate.RegularGridInterpolator(
@@ -387,26 +408,38 @@ class NFWModel(object):
         self._rayleigh_sigma_table = scipy.interpolate.RegularGridInterpolator((numpy.log(self.table_x), numpy.log(self.table_x)), self._rayleigh_sigma)
 
     def _buildRayleighDeltaSigma(self, save=True):
-        self._rayleigh_deltasigma = numpy.array([self.sigma_to_deltasigma(self.table_x, rs) for rs in self._rayleigh_sigma])
-        if save:
-            numpy.save(self.table_file_root+'_rayleigh_deltasigma.npy', self._rayleigh_deltasigma)
+        if (not force) and os.path.isfile(self.table_file_root+'_rayleigh_deltasigma.npy'):
+            self._rayleigh_deltasigma = np.load(self.table_file_root+'_rayleigh_deltasigma.npy')
+        else:
+            self._rayleigh_deltasigma = numpy.array([self.sigma_to_deltasigma(self.table_x, rs) for rs in self._rayleigh_sigma])
+            if save:
+                numpy.save(self.table_file_root+'_rayleigh_deltasigma.npy', self._rayleigh_deltasigma)
 
     def _setupRayleighDeltaSigma(self):
         self._rayleigh_deltasigma_table = scipy.interpolate.RegularGridInterpolator((numpy.log(self.table_x), numpy.log(self.table_x)), self._rayleigh_deltasigma)
 
     def _buildExponentialSigma(self, save=True):
-        self._exponential_sigma = numpy.sum(self._exponential_p[:, numpy.newaxis]*self._miscentered_sigma, axis=2)
-        if save:
-            numpy.save(self.table_file_root+'_exponential_sigma.npy', self._exponential_sigma)
+        if (not force) and os.path.isfile(self.table_file_root+'_exponential_sigma.npy'):
+            self._exponential_sigma = np.load(self.table_file_root+'_exponential_sigma.npy')
+        else:
+            if self.bigmem:
+                self._exponential_sigma = numpy.sum(self._exponential_p[:, numpy.newaxis]*self._miscentered_sigma, axis=2)
+            else:
+                self._exponential_sigma = numpy.array([numpy.sum(ep*self._miscentered_sigma, axis=1) 
+                    for ep in self._exponential_p])
+            if save:
+                numpy.save(self.table_file_root+'_exponential_sigma.npy', self._exponential_sigma)
 
     def _setupExponentialSigma(self):
         self._exponential_sigma_table = scipy.interpolate.RegularGridInterpolator((numpy.log(self.table_x), numpy.log(self.table_x)), self._exponential_sigma)
 
     def _buildExponentialDeltaSigma(self, save=True):
-        self._exponential_deltasigma = numpy.array([self.sigma_to_deltasigma(self.table_x, es) for es in self._exponential_sigma])
-        if save:
-            numpy.save(self.table_file_root+'_exponential_deltasigma.npy', self._exponential_deltasigma)
-
+        if (not force) and os.path.isfile(self.table_file_root+'_exponential_deltasigma.npy'):
+            self._exponential_deltasigma = np.load(self.table_file_root+'_exponential_deltasigma.npy')
+        else:
+            self._exponential_deltasigma = numpy.array([self.sigma_to_deltasigma(self.table_x, es) for es in self._exponential_sigma])
+            if save:
+                numpy.save(self.table_file_root+'_exponential_deltasigma.npy', self._exponential_deltasigma)
     def _setupExponentialDeltaSigma(self):
         self._exponential_deltasigma_table = scipy.interpolate.RegularGridInterpolator((numpy.log(self.table_x), numpy.log(self.table_x)), self._exponential_deltasigma)
         
