@@ -312,7 +312,7 @@ class NFWModel(object):
         self._sigma_table = scipy.interpolate.interp1d(numpy.log(self.table_x), self._sigma,
                                                        fill_value=0, bounds_error=False)
 
-    def _buildMiscenteredSigma(self, save=True):
+    def _buildMiscenteredSigma(self, save=True, force=False):
         if (not force) and os.path.isfile(self.table_file_root+'_miscentered_sigma.npy'):
             self._miscentered_sigma = np.load(self.table_file_root+'_miscentered_sigma.npy')
         else:
@@ -338,7 +338,7 @@ class NFWModel(object):
         self._miscentered_sigma_table = scipy.interpolate.RegularGridInterpolator(
             (numpy.log(self.table_x), numpy.log(self.table_x)), self._miscentered_sigma)
 
-    def _buildDeltaSigma(self, save=True):
+    def _buildDeltaSigma(self, save=True, force=False):
         if (not force) and os.path.isfile(self.table_file_root+'_deltasigma.npy'):
             self._deltasigma = np.load(self.table_file_root+'_deltasigma.npy')
         else:
@@ -356,7 +356,7 @@ class NFWModel(object):
         self._deltasigma_table = scipy.interpolate.interp1d(numpy.log(self.table_x), self._deltasigma,
                                                        fill_value=0, bounds_error=False)
 
-    def _buildMiscenteredDeltaSigma(self, save=True):
+    def _buildMiscenteredDeltaSigma(self, save=True, force=False):
         if (not force) and os.path.isfile(self.table_file_root+'_miscentered_deltasigma.npy'):
             self._miscentered_deltasigma = np.load(self.table_file_root+'_miscentered_deltasigma.npy')
         else:
@@ -369,36 +369,46 @@ class NFWModel(object):
             (numpy.log(self.table_x), numpy.log(self.table_x)), self._miscentered_deltasigma)
 
     def _buildRayleighProbabilities(self, save=True):
-        logr_interval = self.table_x[1]/self.table_x[0]
-        logr_mult = numpy.sqrt(logr_interval)-1./numpy.sqrt(logr_interval)
-        self._rayleigh_p = self.table_x/self.table_x[:,numpy.newaxis]**2*numpy.exp(-0.5*(self.table_x/self.table_x[:,numpy.newaxis])**2)*(self.table_x*logr_mult) # last term is dx!
-        # This accounts for the fact that we don't go from x=0 to infinity.
-        # Comment out this line to check accuracy (tends to be off by ~5% for typical precision and
-        # xrange, but note that the missing weights are multiplying things at large radii where the
-        # signal is small).
-        # self._rayleigh_orig stores the original sum for cross-checks.
-        self._rayleigh_orig = numpy.sum(self._rayleigh_p, axis=1)[:, numpy.newaxis]
-        self._rayleigh_p /= self._rayleigh_orig
-        if save:
-            numpy.save(self.table_file_root+'_rayleigh_p.npy', self._rayleigh_p)
-            numpy.save(self.table_file_root+'_rayleigh_orig.npy', self._rayleigh_orig)
+        if (not force) and (os.path.isfile(self.table_file_root+'_rayleigh_orig.npy')
+                            and os.path.isfile(self.table_file_root+'_rayleigh_p.npy')):
+            self._rayleigh_orig = np.load(self.table_file_root+'_rayleigh_orig.npy')
+            self._rayleigh_p = np.load(self.table_file_root+'_rayleigh_p.npy')
+        else:
+            logr_interval = self.table_x[1]/self.table_x[0]
+            logr_mult = numpy.sqrt(logr_interval)-1./numpy.sqrt(logr_interval)
+            self._rayleigh_p = self.table_x/self.table_x[:,numpy.newaxis]**2*numpy.exp(-0.5*(self.table_x/self.table_x[:,numpy.newaxis])**2)*(self.table_x*logr_mult) # last term is dx!
+            # This accounts for the fact that we don't go from x=0 to infinity.
+            # Comment out this line to check accuracy (tends to be off by ~5% for typical precision and
+            # xrange, but note that the missing weights are multiplying things at large radii where the
+            # signal is small).
+            # self._rayleigh_orig stores the original sum for cross-checks.
+            self._rayleigh_orig = numpy.sum(self._rayleigh_p, axis=1)[:, numpy.newaxis]
+            self._rayleigh_p /= self._rayleigh_orig
+            if save:
+                numpy.save(self.table_file_root+'_rayleigh_p.npy', self._rayleigh_p)
+                numpy.save(self.table_file_root+'_rayleigh_orig.npy', self._rayleigh_orig)
 
-    def _buildExponentialProbabilities(self, save=True):
-        logr_interval = self.table_x[1]/self.table_x[0]
-        logr_mult = numpy.sqrt(logr_interval)-1./numpy.sqrt(logr_interval)
-        self._exponential_p = self.table_x/self.table_x[:,numpy.newaxis]**2*numpy.exp(-self.table_x/self.table_x[:, numpy.newaxis])*self.table_x*logr_mult # last term is dx!
-        # This accounts for the fact that we don't go from x=0 to infinity.
-        # Comment out this line to check accuracy (tends to be off by ~5% for typical precision and
-        # xrange, but note that the missing weights are multiplying things at large radii where the
-        # signal is small).
-        # self._exponential_orig stores the original sum for cross-checks.
-        self._exponential_orig = numpy.sum(self._exponential_p, axis=1)[:, numpy.newaxis]
-        self._exponential_p /= self._exponential_orig
-        if save:
-            numpy.save(self.table_file_root+'_exponential_p.npy', self._exponential_p)
-            numpy.save(self.table_file_root+'_exponential_orig.npy', self._exponential_orig)
+    def _buildExponentialProbabilities(self, save=True, force=False):
+        if (not force) and (os.path.isfile(self.table_file_root+'_exponential_orig.npy')
+                            and os.path.isfile(self.table_file_root+'_exponential_p.npy')):
+            self._exponential_orig = np.load(self.table_file_root+'_exponential_orig.npy')
+            self._exponential_p = np.load(self.table_file_root+'_exponential_p.npy')
+        else:
+            logr_interval = self.table_x[1]/self.table_x[0]
+            logr_mult = numpy.sqrt(logr_interval)-1./numpy.sqrt(logr_interval)
+            self._exponential_p = self.table_x/self.table_x[:,numpy.newaxis]**2*numpy.exp(-self.table_x/self.table_x[:, numpy.newaxis])*self.table_x*logr_mult # last term is dx!
+            # This accounts for the fact that we don't go from x=0 to infinity.
+            # Comment out this line to check accuracy (tends to be off by ~5% for typical precision and
+            # xrange, but note that the missing weights are multiplying things at large radii where the
+            # signal is small).
+            # self._exponential_orig stores the original sum for cross-checks.
+            self._exponential_orig = numpy.sum(self._exponential_p, axis=1)[:, numpy.newaxis]
+            self._exponential_p /= self._exponential_orig
+            if save:
+                numpy.save(self.table_file_root+'_exponential_p.npy', self._exponential_p)
+                numpy.save(self.table_file_root+'_exponential_orig.npy', self._exponential_orig)
 
-    def _buildRayleighSigma(self, save=True):
+    def _buildRayleighSigma(self, save=True, force=False):
         self._rayleigh_sigma = self._rayleigh_p[:, numpy.newaxis]*self._miscentered_sigma
         self._rayleigh_sigma = numpy.sum(self._rayleigh_sigma, axis=2)
         if save:
@@ -407,7 +417,7 @@ class NFWModel(object):
     def _setupRayleighSigma(self):
         self._rayleigh_sigma_table = scipy.interpolate.RegularGridInterpolator((numpy.log(self.table_x), numpy.log(self.table_x)), self._rayleigh_sigma)
 
-    def _buildRayleighDeltaSigma(self, save=True):
+    def _buildRayleighDeltaSigma(self, save=True, force=False):
         if (not force) and os.path.isfile(self.table_file_root+'_rayleigh_deltasigma.npy'):
             self._rayleigh_deltasigma = np.load(self.table_file_root+'_rayleigh_deltasigma.npy')
         else:
@@ -418,7 +428,7 @@ class NFWModel(object):
     def _setupRayleighDeltaSigma(self):
         self._rayleigh_deltasigma_table = scipy.interpolate.RegularGridInterpolator((numpy.log(self.table_x), numpy.log(self.table_x)), self._rayleigh_deltasigma)
 
-    def _buildExponentialSigma(self, save=True):
+    def _buildExponentialSigma(self, save=True, force=False):
         if (not force) and os.path.isfile(self.table_file_root+'_exponential_sigma.npy'):
             self._exponential_sigma = np.load(self.table_file_root+'_exponential_sigma.npy')
         else:
@@ -433,7 +443,7 @@ class NFWModel(object):
     def _setupExponentialSigma(self):
         self._exponential_sigma_table = scipy.interpolate.RegularGridInterpolator((numpy.log(self.table_x), numpy.log(self.table_x)), self._exponential_sigma)
 
-    def _buildExponentialDeltaSigma(self, save=True):
+    def _buildExponentialDeltaSigma(self, save=True, force=False):
         if (not force) and os.path.isfile(self.table_file_root+'_exponential_deltasigma.npy'):
             self._exponential_deltasigma = np.load(self.table_file_root+'_exponential_deltasigma.npy')
         else:
